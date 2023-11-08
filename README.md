@@ -59,7 +59,7 @@ You can find all available options from `--help`
  - Z3 is very powerful, but it can sometimes be VERY (and I mean VERY) slow if the regex is very complex. Be patient :D
  - Multiple runs of `regrets` with the same parameters will yield the same results. This is due to the deterministic nature of Z3. If you want different results, simply run `regrets` with a high `-N` parameter (an update that excludes previously seen strings is coming soon)
 
-## Contribute
+## How to Contribute
 
 PRs for missing features and overcoming limitations are always welcome!
 
