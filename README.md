@@ -52,9 +52,15 @@ $ python main.py --matching "[A-Za-z0-9]{3,10}" --not-partial-matching "[a-z]"
 You can find all available options from `--help`
 
 
-## Limitations
+## Current Limitations
 
  - `regrets` does NOT support PCRE *at the moment* (yeah I know, that kinda sucks... but many regex can still be converted or adapted to the non-PCRE counterpart, e.g., [Negative Lookaheads](https://avalz.it/tricks/simulating-negative-lookaheads-in-non-pcre-engines/))
  - The current [regex-to-Z3 converter](parser.py) (credits to [Andrew Helwer](https://ahelwer.ca/post/2022-01-19-z3-rbac/) for the original code) does not support all regex constructs *at the moment* (e.g., lazy quantifiers such as `*?`, `+?`, and `??`). PRs are welcome!
  - Z3 is very powerful, but it can sometimes be VERY (and I mean VERY) slow if the regex is very complex. Be patient :D
  - Multiple runs of `regrets` with the same parameters will yield the same results. This is due to the deterministic nature of Z3. If you want different results, simply run `regrets` with a high `-N` parameter (an update that excludes previously seen strings is coming soon)
+
+## Contribute
+
+PRs for missing features and overcoming limitations are always welcome!
+
+But also, feel free to open issues regarding usability or performance of the tool.
