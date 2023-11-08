@@ -1,12 +1,8 @@
 # This snippet was ~~stolen~~borrowed from https://github.com/gravitational/rbac-linter/blob/main/role_analyzer.py
 
-from dataclasses import dataclass
-from enum import Enum
-import logging
 import re
 import sre_constants
 import sre_parse
-import typing
 import z3 # type: ignore
 
 # The Z3 regex matching all strings accepted by re1 but not re2.
