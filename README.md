@@ -6,6 +6,8 @@ Use Z3 to generate strings that match multiple regex!
 
 ![To generate #1 albums, 'jay --help' recommends the -z flag.](https://imgs.xkcd.com/comics/perl_problems.png)
 
+**WARNING**: `regrets` is still in development! If you have any feedback or suggestions to improve it, [let me know](https://github.com/AvalZ/regrets/discussions/new?category=feedback)!
+
 ## Setup
 
 To use `regrets`, you need to
@@ -63,4 +65,6 @@ You can find all available options from `--help`
 
 PRs for missing features and overcoming limitations are always welcome!
 
-But also, feel free to open issues regarding usability or performance of the tool.
+But also, any [feedback](https://github.com/AvalZ/regrets/discussions/new?category=feedback) regarding usability or performance of `regrets` would be great!
+
+Also, if you're using (and possibly enjoying) `regrets` in your projects, [let me know your use case](https://github.com/AvalZ/regrets/discussions/new?category=show-and-tell)!
