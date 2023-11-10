@@ -23,22 +23,37 @@ def generate(
 
     bypass = String('bypass')
 
+    if verbose and (matching or not_matching):
+        print("# Full matches")
+
     # Fully Match these regex
     for regex in matching:
+        if verbose:
+            print(f" [+] {regex}")
         r = regex_to_z3_expr(sre_parse.parse(regex))
         solver.add(InRe(bypass, r))
 
     # Don't fully match these regex
     for regex in not_matching:
+        if verbose:
+            print(f" [-] {regex}")
         r = regex_to_z3_expr(sre_parse.parse(regex))
         solver.add(InRe(bypass, Complement(r)))
 
+    if verbose and (partial_matching or not_partial_matching):
+        print("## Partial Matches")
+
     # Partially match these regex
     for regex in partial_matching:
+        if verbose:
+            print(f"  +  {regex}")
         r = regex_to_z3_expr(sre_parse.parse(f".*{regex}.*"))
         solver.add(InRe(bypass, r))
 
     # Don't partially match these regex
+    if verbose and not_partial_matching:
+        if verbose:
+            print(f"  -  {regex}")
     for regex in not_partial_matching:
         r = regex_to_z3_expr(sre_parse.parse(f".*{regex}.*"))
         solver.add(InRe(bypass, Complement(r)))
@@ -48,8 +63,8 @@ def generate(
 
     # Only use printable ASCII
     for i in range(max_len):
-        solver.add(bypass[i].to_int() > 32)
-        solver.add(bypass[i].to_int() < 127)
+        solver.add(bypass[i].to_int() > 31)
+        solver.add(bypass[i].to_int() < 128)
 
     for _ in range(N):
         if solver.check():
