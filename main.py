@@ -16,7 +16,7 @@ def generate(
         not_partial_matching: Annotated[List[str], typer.Option(help="The string must NOT partially match these regex")] = [],
         min_len: Annotated[int, typer.Option('--min-len', help="Minimum length for generated samples")] = 1,
         max_len: Annotated[int, typer.Option('--max-len', help="Maximum length for generated samples")] = 100,
-        N: Annotated[int, typer.Option(help="Number of samples to generate")] = 1,
+        N: Annotated[int, typer.Option('-N', help="Number of samples to generate")] = 1,
         verbose: Annotated[bool, typer.Option('-v', '--verbose', help="Verbose output")] = False
     ):
     solver = Solver()
