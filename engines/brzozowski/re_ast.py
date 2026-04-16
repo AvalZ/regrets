@@ -129,6 +129,8 @@ def mk_kleene(r: Re) -> Re:
 def mk_not(r: Re) -> Re:
     if r == NO_GOOD:
         return ALL_GOOD
+    if r == ALL_GOOD:
+        return NO_GOOD
     if isinstance(r, ReNot):
         return r.r
     return ReNot(r)

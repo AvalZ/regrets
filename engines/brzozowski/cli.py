@@ -4,12 +4,13 @@ import typer
 from typing_extensions import Annotated
 
 from engines.brzozowski.re_ast import (
-    Re, ALL_GOOD, NO_GOOD, mk_and, mk_not, nullable,
+    Re, ALL_GOOD, NO_GOOD, EPS, mk_and, mk_not, nullable,
 )
 from engines.brzozowski.re_ast import derive as deriv
 from engines.brzozowski.parser import parse
 from engines.brzozowski.pretty import pretty
 from engines.brzozowski.generator import generate as gen_strings
+from engines.brzozowski.dfa import build_dfa, dfa_to_regex, chars_to_re, PRINTABLE
 
 
 app = typer.Typer(help="Brzozowski derivative-based generation and interactive derivation.")
@@ -50,9 +51,47 @@ def show(
         not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
-    """Print the combined regex after intersection/negation, simplified via smart constructors."""
+    """Resolve via Brzozowski derivatives: build DFA then collapse with state elimination."""
     re = _build(matching, not_matching)
-    print(_show(re, debug))
+    states, transitions, accepts, start_id = build_dfa(re)
+    result = dfa_to_regex(states, transitions, accepts, start_id)
+    print(_show(result, debug))
+
+
+@app.command()
+def dfa(
+        matching: Annotated[List[str], typer.Option(help="Regex to intersect")] = [],
+        not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
+        debug: Annotated[bool, typer.Option('--debug', help="Show internal AST for each state instead of pretty-printed regex")] = False,
+    ):
+    """Build the DFA via Brzozowski derivatives and print its states and transitions."""
+    re = _build(matching, not_matching)
+    states, transitions, accepts, start_id = build_dfa(re)
+    print(f"States ({len(states)}):")
+    for i, s in enumerate(states):
+        tags = []
+        if i == start_id:
+            tags.append('start')
+        if i in accepts:
+            tags.append('accept')
+        tag_str = f" [{','.join(tags)}]" if tags else ""
+        print(f"  {i}{tag_str}: {_show(s, debug)}")
+    print("Transitions:")
+    for src in sorted(transitions):
+        for dst in sorted(transitions[src]):
+            label = pretty(chars_to_re(transitions[src][dst], PRINTABLE))
+            print(f"  {src} --{label}--> {dst}")
+
+
+def _tag(re: Re) -> str:
+    if re == NO_GOOD:
+        return 'DEAD'
+    return 'MATCH' if nullable(re) else 'partial'
+
+
+def _final_tag(re: Re) -> str:
+    # End-of-input verdict (anchored fullmatch): nullable → MATCH, else DEAD.
+    return 'MATCH' if nullable(re) else 'DEAD'
 
 
 @app.command()
@@ -62,21 +101,34 @@ def derive(
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
     re = _build(matching, not_matching)
-    status = 'MATCH (ε accepted)' if nullable(re) else 'partial'
-    print(f"start [{status}]: {_show(re, debug)}")
-    print('Enter chars (multi-char input replays one at a time). Empty line / Ctrl-D to exit.')
+    print(f"start [{_tag(re)}]: {_show(re, debug)}")
+    print('Enter chars (multi-char input replays one at a time).')
+    print('Empty line: evaluate fullmatch on input so far. Empty line again to exit; or Ctrl-D.')
+    consumed = ''
+    pending_exit = False
     while True:
         try:
-            s = input('> ')
+            s = input(f'{consumed}> ')
         except EOFError:
             print()
             break
         if not s:
-            break
-        for i, c in enumerate(s):
+            tag = _final_tag(re)
+            print(f'  ε [{tag}]: {_show(re, debug)}')
+            if pending_exit:
+                break
+            print('  (empty line again to exit)')
+            pending_exit = True
+            continue
+        pending_exit = False
+        dead = False
+        for c in s:
             re = deriv(c, re)
+            consumed += c
             if re == NO_GOOD:
-                print(f"  '{c}' (pos {i}): DEAD — regex broken at this char")
-                return
-            tag = 'MATCH' if nullable(re) else 'partial'
-            print(f"  '{c}' [{tag}]: {_show(re, debug)}")
+                print(f"  '{c}' [DEAD] at pos {len(consumed) - 1} — regex broken")
+                dead = True
+                break
+            print(f"  '{c}' [{_tag(re)}]: {_show(re, debug)}")
+        if dead:
+            return

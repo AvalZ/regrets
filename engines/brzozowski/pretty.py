@@ -26,9 +26,13 @@ def _pretty(re: Re, ctx: int) -> str:
     if isinstance(re, ReCat):
         return _wrap(_format_cat(re.rs), P_CAT, ctx)
     if isinstance(re, ReOr):
-        # X? shortcut: ReOr([EPS, X]) — smart constructor sorts so EPS comes first.
-        if len(re.rs) == 2 and re.rs[0] == EPS:
-            return _wrap(_pretty(re.rs[1], P_ATOM) + '?', P_STAR, ctx)
+        # ε|A|B|... collapses to (A|B|...)?  — smart constructor sorts so EPS comes first.
+        if re.rs and re.rs[0] == EPS:
+            rest = re.rs[1:]
+            if len(rest) == 1:
+                return _wrap(_pretty(rest[0], P_ATOM) + '?', P_STAR, ctx)
+            inner = '|'.join(_pretty(r, P_OR) for r in rest)
+            return _wrap(f'({inner})?', P_STAR, ctx)
         body = '|'.join(_pretty(r, P_OR) for r in re.rs)
         return _wrap(body, P_OR, ctx)
     if isinstance(re, ReAnd):

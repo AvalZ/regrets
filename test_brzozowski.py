@@ -120,6 +120,13 @@ def test_generate_unsat():
     assert list(generate(re, n=3, min_len=1, max_len=3)) == []
 
 
+def test_mk_not_all_good_collapses_to_no_good():
+    # ~.* accepts no string at all (including ε), so it must collapse to NO_GOOD.
+    assert mk_not(ALL_GOOD) == NO_GOOD
+    # And via parse of a pattern semantically equivalent to .*
+    assert mk_not(parse(".*")) == NO_GOOD
+
+
 def test_pretty_basic():
     assert pretty(parse("abc")) == "abc"
     assert pretty(parse(".")) == "."
@@ -144,6 +151,12 @@ def test_pretty_charclass_compact():
 ])
 def test_pretty_quantifier_shortcuts(pattern, expected):
     assert pretty(parse(pattern)) == expected
+
+
+def test_pretty_multi_alt_with_eps_collapses_to_optional():
+    from engines.brzozowski.re_ast import ReOr, EPS as _EPS
+    re = ReOr((_EPS, parse("a"), parse("b"), parse("c")))
+    assert pretty(re) == "(a|b|c)?"
 
 
 runner = CliRunner()
@@ -186,29 +199,102 @@ def test_cli_derive_dead_marks_position():
     assert 'pos 2' in result.stdout
 
 
-def test_cli_show_intersection():
+def test_cli_derive_empty_line_on_non_nullable_is_dead():
+    # Anchored fullmatch: hitting Enter on a partial state == empty input → DEAD.
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='a\n\n',
+    )
+    assert result.exit_code == 0
+    assert 'ε [DEAD]' in result.stdout
+    assert 'partial' in result.stdout  # the 'a' step still shows partial
+
+
+def test_cli_derive_empty_line_on_nullable_is_match():
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='abc\n\n',
+    )
+    assert result.exit_code == 0
+    assert 'ε [MATCH]' in result.stdout
+
+
+def test_cli_derive_prompt_prefix_shows_consumed():
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='ab\nc\n\n',
+    )
+    assert result.exit_code == 0
+    assert 'ab>' in result.stdout
+    assert 'abc>' in result.stdout
+
+
+def test_cli_derive_pending_exit_requires_two_empties():
+    # First empty: prints hint. Second empty: exits.
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='\n\n',
+    )
+    assert result.exit_code == 0
+    assert '(empty line again to exit)' in result.stdout
+
+
+def test_cli_show_resolves_to_dfa_regex():
+    # DFA resolution should flatten [a-z]+ ∧ .*z.* to a single regex with a z in it.
     result = runner.invoke(app, [
         'brzozowski', 'show',
         '--matching', '[a-z]+', '--matching', '.*z.*',
     ])
     assert result.exit_code == 0
     out = result.stdout.strip()
-    assert '&' in out
     assert 'z' in out
+    # State-elimination drops the & / ~ meta operators (everything is literal regex now).
+    assert '&' not in out
+    assert '~' not in out
 
 
-def test_cli_show_negation():
-    result = runner.invoke(app, [
-        'brzozowski', 'show', '--not-matching', 'abc',
-    ])
+def test_cli_show_negation_expanded():
+    result = runner.invoke(app, ['brzozowski', 'show', '--not-matching', 'abc'])
     assert result.exit_code == 0
-    assert '~' in result.stdout
+    out = result.stdout.strip()
+    assert '~' not in out  # elimination turns ~abc into an explicit alternation
+
+
+def test_cli_show_trivial_passthrough():
+    result = runner.invoke(app, ['brzozowski', 'show', '--matching', 'abc'])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == 'abc'
 
 
 def test_cli_show_debug():
     result = runner.invoke(app, ['brzozowski', 'show', '--matching', 'abc', '--debug'])
     assert result.exit_code == 0
     assert 'ReCat' in result.stdout or 'OneOf' in result.stdout
+
+
+def test_cli_dfa_prints_states_and_transitions():
+    result = runner.invoke(app, ['brzozowski', 'dfa', '--matching', 'abc'])
+    assert result.exit_code == 0
+    assert 'States' in result.stdout
+    assert 'Transitions' in result.stdout
+    assert 'start' in result.stdout
+    assert 'accept' in result.stdout
+    assert '-->' in result.stdout
+
+
+def test_dfa_to_regex_semantics_match_original():
+    # Resolved regex should accept the same strings as the intersection.
+    from engines.brzozowski.dfa import build_dfa, dfa_to_regex
+    original = mk_and([parse(r"[a-c]{1,3}"), parse(r".*b.*")])
+    resolved = dfa_to_regex(*build_dfa(original))
+    for s in ['b', 'ab', 'bc', 'abc', 'bcb']:
+        assert accepts(original, s) == accepts(resolved, s)
+    for s in ['a', 'c', 'ac', '', 'aaa', 'ccc']:
+        assert accepts(original, s) == accepts(resolved, s)
 
 
 def test_cli_derive_debug_shows_ast():
