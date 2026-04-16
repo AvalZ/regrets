@@ -1,6 +1,5 @@
 # This snippet was ~~stolen~~borrowed from https://github.com/gravitational/rbac-linter/blob/main/role_analyzer.py
 
-import re
 import sre_constants
 import sre_parse
 import z3 # type: ignore

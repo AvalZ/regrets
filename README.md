@@ -13,8 +13,9 @@ Use Z3 to generate strings that match multiple regex!
 To use `regrets`, you need to
 
  - Clone this repository
- - Install all requirements (Z3 and Typer, via `pip install -r requirements.txt`)
- - Run `regrets`!
+ - Install [Poetry](https://python-poetry.org/docs/#installation)
+ - Run `poetry install` to install all dependencies
+ - Run `regrets` via `poetry run regrets` (or `poetry run python main.py`)
 
 ## How to use
 

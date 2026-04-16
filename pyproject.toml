@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "regrets"
+version = "0.1.0"
+description = "Use Z3 to generate strings that match multiple regex."
+authors = ["AvalZ <avalenza89@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+    { include = "main.py" },
+    { include = "parser.py" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+z3-solver = "^4.12"
+typer = "^0.9"
+typing-extensions = "^4.6"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[tool.poetry.scripts]
+regrets = "main:app"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
