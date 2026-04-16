@@ -26,15 +26,15 @@ def category_regex(category : sre_constants._NamedIntConstant) -> z3.ReRef:
     return z3.Union(z3.Range('a', 'z'), z3.Range('A', 'Z'), z3.Range('0', '9'), z3.Re('_'))
   else:
     raise NotImplementedError(f'ERROR: regex category {category} not yet implemented')
-    
+
 # Translates a specific regex construct into its Z3 equivalent.
 def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
   node_type, node_value = regex_construct
   if sre_constants.LITERAL == node_type: # a
     return z3.Re(chr(node_value))
-  if sre_constants.NOT_LITERAL == node_type: # [^a]
+  elif sre_constants.NOT_LITERAL == node_type: # [^a]
     return Minus(AnyChar(), z3.Re(chr(node_value)))
-  if sre_constants.SUBPATTERN == node_type:
+  elif sre_constants.SUBPATTERN == node_type:
     _, _, _, value = node_value
     return regex_to_z3_expr(value)
   elif sre_constants.ANY == node_type: # .
