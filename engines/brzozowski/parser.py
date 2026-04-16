@@ -2,8 +2,8 @@ import sre_constants
 import sre_parse
 
 from engines.brzozowski.re_ast import (
-    Re, OneOf, CharClass, EPS,
-    mk_cat, mk_or, mk_kleene,
+    Re, OneOf, CharClass, EPS, ALL_GOOD, LookBehind,
+    mk_cat, mk_or, mk_kleene, mk_and, mk_not,
 )
 
 
@@ -97,17 +97,72 @@ def _construct_to_re(node) -> Re:
         return OneOf(CharClass(frozenset(chr(c) for c in range(low, high + 1)), negated=False))
     if node_type == sc.CATEGORY:
         return _category(node_value)
-    if node_type == sc.AT:
-        raise NotImplementedError(f'regex anchor {node_value} not implemented')
     raise NotImplementedError(f'regex construct {node} not implemented')
+
+
+_WORD_CLASS = CharClass(_WORD, negated=False)
+
+
+def _boundary(suffix: Re, negated: bool) -> Re:
+    """Encode \\b (negated=False) or \\B (negated=True) at a position whose remaining regex is `suffix`.
+    \\b = (?<=\\w)(?!\\w) | (?=\\w)(?<!\\w). Each alternative has a fixed-width LookBehind plus a
+    suffix-shape constraint: "suffix starts with \\w" is `\\w·.*`; its negation handles end-of-input."""
+    word_prefix = mk_cat([OneOf(_WORD_CLASS), ALL_GOOD])
+    starts_word = mk_and([suffix, word_prefix])
+    starts_non_word = mk_and([suffix, mk_not(word_prefix)])
+    alt_after_word = mk_cat([LookBehind(_WORD_CLASS, negated=False), starts_non_word])
+    alt_before_word = mk_cat([LookBehind(_WORD_CLASS, negated=True), starts_word])
+    if negated:
+        # \B: either both sides word, or both sides non-word.
+        alt_in_word = mk_cat([LookBehind(_WORD_CLASS, negated=False), starts_word])
+        alt_between_non = mk_cat([LookBehind(_WORD_CLASS, negated=True), starts_non_word])
+        return mk_or([alt_in_word, alt_between_non])
+    return mk_or([alt_after_word, alt_before_word])
 
 
 def regex_to_re(parsed: sre_parse.SubPattern) -> Re:
     if not parsed.data:
         raise ValueError('regex is empty')
-    if len(parsed.data) == 1:
-        return _construct_to_re(parsed[0])
-    return mk_cat([_construct_to_re(c) for c in parsed.data])
+    return _build_seq(list(parsed.data))
+
+
+def _build_seq(items) -> Re:
+    sc = sre_constants
+    prefix = []
+    i = 0
+    while i < len(items):
+        node_type, node_value = items[i]
+        if node_type == sc.AT:
+            if node_value == sc.AT_BOUNDARY or node_value == sc.AT_NON_BOUNDARY:
+                suffix = _build_seq(items[i + 1:])
+                prefix.append(_boundary(suffix, negated=(node_value == sc.AT_NON_BOUNDARY)))
+                return prefix[0] if len(prefix) == 1 else mk_cat(prefix)
+            raise NotImplementedError(f'regex anchor {node_value} not implemented')
+        if node_type in (sc.ASSERT, sc.ASSERT_NOT):
+            lookahead_constraints = []
+            while i < len(items) and items[i][0] in (sc.ASSERT, sc.ASSERT_NOT):
+                a_type, (direction, sub) = items[i]
+                body = regex_to_re(sub)
+                if direction == 1:
+                    lookahead_constraints.append(mk_not(body) if a_type == sc.ASSERT_NOT else body)
+                elif direction == -1:
+                    if not isinstance(body, OneOf):
+                        raise NotImplementedError('variable-width lookbehind not supported')
+                    prefix.append(LookBehind(body.cc, negated=(a_type == sc.ASSERT_NOT)))
+                else:
+                    raise NotImplementedError(f'assertion direction {direction}')
+                i += 1
+            if lookahead_constraints:
+                suffix = _build_seq(items[i:])
+                constrained = mk_and([suffix] + lookahead_constraints)
+                prefix.append(constrained)
+                return prefix[0] if len(prefix) == 1 else mk_cat(prefix)
+            continue
+        prefix.append(_construct_to_re(items[i]))
+        i += 1
+    if not prefix:
+        return EPS
+    return prefix[0] if len(prefix) == 1 else mk_cat(prefix)
 
 
 def parse(pattern: str) -> Re:

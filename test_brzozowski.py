@@ -55,7 +55,7 @@ def test_empty_regex_raises():
         parse("")
 
 
-@pytest.mark.parametrize("pattern", ["^a", "a$", r"\ba"])
+@pytest.mark.parametrize("pattern", ["^a", "a$"])
 def test_unsupported_anchors_raise(pattern):
     with pytest.raises(NotImplementedError):
         parse(pattern)
@@ -295,6 +295,100 @@ def test_dfa_to_regex_semantics_match_original():
         assert accepts(original, s) == accepts(resolved, s)
     for s in ['a', 'c', 'ac', '', 'aaa', 'ccc']:
         assert accepts(original, s) == accepts(resolved, s)
+
+
+def test_lookahead_is_and_constraint():
+    # (?=X) behaves like full-string AND with X.
+    re = parse(r"(?=.*a.*)(?=.*b.*).*")
+    assert accepts(re, "ab")
+    assert accepts(re, "ba")
+    assert accepts(re, "cab")
+    assert not accepts(re, "a")
+    assert not accepts(re, "b")
+    assert not accepts(re, "")
+
+
+def test_negative_lookahead_is_not_constraint():
+    # (?!X) behaves like full-string NOT X, intersected with the surrounding regex.
+    re = parse(r"(?!abc).{1,3}")
+    assert accepts(re, "abd")
+    assert accepts(re, "ab")
+    assert not accepts(re, "abc")
+
+
+def test_lookahead_equivalent_to_mk_and():
+    a = parse(r"(?=[a-z]+)(?=.*z.*).{1,4}")
+    b = mk_and([parse(r"[a-z]+"), parse(r".*z.*"), parse(r".{1,4}")])
+    for s in ["z", "az", "zaz", "abcd", "Z", "", "aaaaa"]:
+        assert accepts(a, s) == accepts(b, s)
+
+
+def test_lookahead_is_positional():
+    # Lookahead constrains the suffix consumed after its position.
+    assert accepts(parse(r"a(?=.)b"), "ab")
+    assert not accepts(parse(r"a(?=x)b"), "ab")  # suffix "b" must also match "x"
+    assert accepts(parse(r"a(?!x)b"), "ab")      # suffix "b" must not match "x"
+    assert not accepts(parse(r"a(?!b)b"), "ab")  # suffix "b" matches "b", negated fails
+
+
+def test_variable_width_lookbehind_rejected():
+    with pytest.raises(NotImplementedError):
+        parse(r"(?<=ab)c")
+
+
+def test_fixed_width_lookbehind():
+    # (?<=a)b : prev char is 'a', then 'b'.
+    assert accepts(parse(r"(?<=a)b"), "b") is False      # no prev char
+    assert accepts(parse(r"a(?<=a)b"), "ab") is True
+    assert accepts(parse(r"x(?<=a)b"), "xb") is False    # prev is 'x'
+    # (?<!a)b : prev char is not 'a' (or no prev), then 'b'.
+    assert accepts(parse(r"(?<!a)b"), "b") is True       # start-of-string passes negative LB
+    assert accepts(parse(r"a(?<!a)b"), "ab") is False
+    assert accepts(parse(r"x(?<!a)b"), "xb") is True
+
+
+def test_word_boundary():
+    # \b: matches at word/non-word transitions incl. string ends.
+    re = parse(r"\bword\b")
+    assert accepts(re, "word") is True
+    assert not accepts(re, "wordx")
+    assert not accepts(re, "xword")
+    re2 = parse(r"\b\w+\b")
+    assert accepts(re2, "hello")
+    assert accepts(re2, "a")
+    assert not accepts(re2, "")
+
+
+@pytest.mark.parametrize("pattern", [
+    r"\bword\b", r"\b\w+\b", r"foo\Bbar", r"(?<=a)b", r"(?<!a)b",
+    r"\ba", r"a\b", r"\b\d+\b", r"(?<=[A-Z])[a-z]+",
+])
+def test_lookbehind_matches_python_re(pattern):
+    strings = ['', 'word', 'wordx', 'xword', 'foobar', 'foo bar', 'ab', 'xb', 'a', 'Ab', 'Abcd', '123', 'a1', '1a', '_x']
+    r = parse(pattern)
+    for s in strings:
+        assert accepts(r, s) == bool(pyre.fullmatch(pattern, s)), f"{pattern!r} on {s!r}"
+
+
+def test_non_word_boundary():
+    # \B matches between two \w or between two non-\w (never at string ends with mixed classes).
+    re = parse(r"foo\Bbar")
+    assert accepts(re, "foobar")  # 'o' and 'b' both \w → not a boundary → \B matches
+    # \B at start-of-string adjacent to \w is NOT a match (start-to-\w is a boundary).
+    assert not accepts(parse(r"\Bword"), "word")
+
+
+def test_cli_show_flattens_lookahead():
+    result = runner.invoke(app, [
+        'brzozowski', 'show',
+        '--matching', r'(?=[a-z]+)(?=.*z.*).{1,4}',
+    ])
+    assert result.exit_code == 0
+    out = result.stdout.strip()
+    assert 'z' in out
+    assert '&' not in out
+    assert '~' not in out
+    assert '(?' not in out
 
 
 def test_cli_derive_debug_shows_ast():

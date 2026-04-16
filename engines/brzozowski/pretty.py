@@ -1,5 +1,5 @@
 from engines.brzozowski.re_ast import (
-    Re, OneOf, Kleene, ReCat, ReOr, ReAnd, ReNot, CharClass,
+    Re, OneOf, Kleene, ReCat, ReOr, ReAnd, ReNot, LookBehind, CharClass,
     EPS, NO_GOOD, ALL_GOOD,
 )
 
@@ -40,6 +40,10 @@ def _pretty(re: Re, ctx: int) -> str:
         return _wrap(body, P_AND, ctx)
     if isinstance(re, ReNot):
         return _wrap('~' + _pretty(re.r, P_ATOM), P_STAR, ctx)
+    if isinstance(re, LookBehind):
+        body = _format_charclass(re.cc)
+        head = '(?<!' if re.negated else '(?<='
+        return head + body + ')'
     return repr(re)
 
 
