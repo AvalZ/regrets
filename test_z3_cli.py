@@ -3,7 +3,8 @@ import re
 import pytest
 from typer.testing import CliRunner
 
-from main import app, build_solver, fetch_regex
+from main import app
+from engines.z3.solver import build_solver, fetch_regex
 from z3 import sat
 
 
@@ -63,7 +64,6 @@ def test_printable_ascii_only():
 
 
 def test_unsat_contradiction():
-    from main import build_solver
     solver, _ = build_solver(
         matching=['a'], not_matching=['a'],
         partial_matching=[], not_partial_matching=[],
@@ -85,7 +85,7 @@ def test_fetch_regex_partial_wrapping():
 
 
 def test_cli_generate_smoke():
-    result = runner.invoke(app, ['--matching', '[0-9]{3}', '-N', '1'])
+    result = runner.invoke(app, ['z3', 'generate', '--matching', '[0-9]{3}', '-N', '1'])
     assert result.exit_code == 0
     out = result.stdout.strip()
     assert re.fullmatch(r'[0-9]{3}', out)
@@ -93,6 +93,7 @@ def test_cli_generate_smoke():
 
 def test_cli_unsat_prints_once():
     result = runner.invoke(app, [
+        'z3', 'generate',
         '--matching', 'a', '--not-matching', 'a',
         '--min-len', '1', '--max-len', '1', '-N', '5',
     ])

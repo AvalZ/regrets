@@ -4,7 +4,7 @@ import sre_parse
 import pytest
 import z3
 
-from parser import regex_to_z3_expr
+from engines.z3.parser import regex_to_z3_expr
 
 
 def compile_to_z3(pattern: str) -> z3.ReRef:

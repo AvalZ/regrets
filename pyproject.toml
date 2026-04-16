@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 packages = [
     { include = "main.py" },
-    { include = "parser.py" },
+    { include = "engines" },
 ]
 
 [tool.poetry.dependencies]
