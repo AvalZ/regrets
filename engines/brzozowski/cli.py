@@ -1,3 +1,7 @@
+import sys
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Optional
 
@@ -51,6 +55,36 @@ def _show(re: Re, debug: bool) -> str:
     return repr(re) if debug else pretty(re)
 
 
+@contextmanager
+def _spinner(message: str):
+    """Render a ticking spinner to stderr while the block runs. No-op for non-TTY."""
+    if not sys.stderr.isatty():
+        yield
+        return
+    frames = '|/-\\'
+    stop = threading.Event()
+    start = time.monotonic()
+
+    def tick():
+        i = 0
+        while not stop.is_set():
+            elapsed = time.monotonic() - start
+            sys.stderr.write(f'\r{frames[i % len(frames)]} {message} ({elapsed:.1f}s)')
+            sys.stderr.flush()
+            i += 1
+            stop.wait(0.1)
+
+    t = threading.Thread(target=tick, daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        t.join()
+        sys.stderr.write('\r\033[K')
+        sys.stderr.flush()
+
+
 @app.command()
 def generate(
         matching: Annotated[List[str], typer.Option(help="String must fully match these regex (intersected)")] = [],
@@ -80,8 +114,9 @@ def show(
     ):
     """Resolve via Brzozowski derivatives: build DFA then collapse with state elimination."""
     re = _build(matching, not_matching, matching_file, not_matching_file)
-    states, transitions, accepts, start_id = build_dfa(re)
-    result = dfa_to_regex(states, transitions, accepts, start_id)
+    with _spinner('Building DFA and collapsing to regex'):
+        states, transitions, accepts, start_id = build_dfa(re)
+        result = dfa_to_regex(states, transitions, accepts, start_id)
     print(_show(result, debug))
 
 
@@ -95,7 +130,8 @@ def dfa(
     ):
     """Build the DFA via Brzozowski derivatives and print its states and transitions."""
     re = _build(matching, not_matching, matching_file, not_matching_file)
-    states, transitions, accepts, start_id = build_dfa(re)
+    with _spinner('Building DFA'):
+        states, transitions, accepts, start_id = build_dfa(re)
     print(f"States ({len(states)}):")
     for i, s in enumerate(states):
         tags = []
