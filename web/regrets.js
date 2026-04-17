@@ -25,7 +25,12 @@ async function detectBase() {
 
 export function fmtErr(err) {
   if (!err) return 'unknown';
-  if (err instanceof Error) return err.stack || err.message || String(err);
+  if (err instanceof Error) {
+    const msg = err.message || '';
+    const stack = err.stack || '';
+    if (msg && stack && !stack.includes(msg)) return `${msg}\n${stack}`;
+    return stack || msg || String(err);
+  }
   if (typeof err === 'object') {
     try { return JSON.stringify(err); } catch (_) { return String(err); }
   }
@@ -157,6 +162,89 @@ def dfa_text(matching_raw, not_matching_raw):
     return '\\n'.join(lines)
 
 
+def _dot_escape(s):
+    return s.replace('\\\\', '\\\\\\\\').replace('"', '\\\\"')
+
+
+def _edge_label(transitions, src, dst):
+    return pretty(chars_to_re(transitions[src][dst], PRINTABLE))
+
+
+def _collapse_chains(states, transitions, accepts, start_id):
+    n = len(states)
+    out_succ = {i: list(transitions.get(i, {}).keys()) for i in range(n)}
+    in_pred = {i: [] for i in range(n)}
+    for src in range(n):
+        for dst in out_succ[src]:
+            in_pred[dst].append(src)
+
+    def is_interior(i):
+        if i == start_id or i in accepts:
+            return False
+        succs = out_succ[i]
+        preds = in_pred[i]
+        if len(succs) != 1 or len(preds) != 1:
+            return False
+        if succs[0] == i or preds[0] == i:
+            return False
+        return True
+
+    interior = {i for i in range(n) if is_interior(i)}
+    edges = []
+    visited_edges = set()
+    for src in range(n):
+        if src in interior:
+            continue
+        for dst in out_succ[src]:
+            if (src, dst) in visited_edges:
+                continue
+            visited_edges.add((src, dst))
+            labels = [_edge_label(transitions, src, dst)]
+            cur = dst
+            while cur in interior:
+                nxt = out_succ[cur][0]
+                labels.append(_edge_label(transitions, cur, nxt))
+                visited_edges.add((cur, nxt))
+                cur = nxt
+            edges.append((src, cur, labels))
+    kept = [i for i in range(n) if i not in interior]
+    return kept, edges
+
+
+def dfa_dot(matching_raw, not_matching_raw, compress=True):
+    re = build_re(matching_raw, not_matching_raw)
+    states, transitions, accepts, start_id = build_dfa(re)
+    lines = [
+        'digraph DFA {',
+        '  rankdir=LR;',
+        '  bgcolor="transparent";',
+        '  node [fontname="Helvetica", fontsize=12];',
+        '  edge [fontname="Helvetica", fontsize=11];',
+        '  __start [shape=point, width=0.1, color="#888"];',
+    ]
+    if compress:
+        kept, edges = _collapse_chains(states, transitions, accepts, start_id)
+    else:
+        kept = list(range(len(states)))
+        edges = []
+        for src in sorted(transitions):
+            for dst in sorted(transitions[src]):
+                edges.append((src, dst, [_edge_label(transitions, src, dst)]))
+    for i in kept:
+        shape = 'doublecircle' if i in accepts else 'circle'
+        tip = _dot_escape(pretty(states[i]))
+        lines.append(f'  {i} [shape={shape}, label="{i}", tooltip="{tip}"];')
+    lines.append(f'  __start -> {start_id};')
+    for src, dst, labels in edges:
+        if len(labels) == 1:
+            label = _dot_escape(labels[0])
+        else:
+            label = _dot_escape(''.join(labels))
+        lines.append(f'  {src} -> {dst} [label="{label}"];')
+    lines.append('}')
+    return '\\n'.join(lines)
+
+
 def _tag(re):
     if re == NO_GOOD:
         return 'DEAD'
@@ -207,6 +295,7 @@ def start_derive_negated(pattern):
     convertSingle: pyodide.globals.get('convert_single'),
     negateSingle: pyodide.globals.get('negate_single'),
     dfaText: pyodide.globals.get('dfa_text'),
+    dfaDot: pyodide.globals.get('dfa_dot'),
     startDerive: pyodide.globals.get('start_derive'),
     startDeriveSingle: pyodide.globals.get('start_derive_single'),
     startDeriveNegated: pyodide.globals.get('start_derive_negated'),
