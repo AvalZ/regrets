@@ -130,6 +130,13 @@ def convert_single(pattern):
     return pretty(merged)
 
 
+def negate_single(pattern):
+    re = mk_not(parse(pattern))
+    states, transitions, accepts, start_id = build_dfa(re)
+    merged = dfa_to_regex(states, transitions, accepts, start_id)
+    return pretty(merged)
+
+
 def dfa_text(matching_raw, not_matching_raw):
     re = build_re(matching_raw, not_matching_raw)
     states, transitions, accepts, start_id = build_dfa(re)
@@ -189,14 +196,20 @@ def start_derive(matching_raw, not_matching_raw):
 
 def start_derive_single(pattern):
     return DeriveSession(parse(pattern))
+
+
+def start_derive_negated(pattern):
+    return DeriveSession(mk_not(parse(pattern)))
 `);
 
   const api = {
     showMerged: pyodide.globals.get('show_merged'),
     convertSingle: pyodide.globals.get('convert_single'),
+    negateSingle: pyodide.globals.get('negate_single'),
     dfaText: pyodide.globals.get('dfa_text'),
     startDerive: pyodide.globals.get('start_derive'),
     startDeriveSingle: pyodide.globals.get('start_derive_single'),
+    startDeriveNegated: pyodide.globals.get('start_derive_negated'),
   };
 
   setStatus('Ready.');
