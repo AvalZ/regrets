@@ -1,6 +1,6 @@
 # Regrets
 
-Use Z3 or Brzozowski derivatives to generate strings that match multiple regex — and to intersect, complement, and flatten them into a single regex.
+Use Z3 or Brzozowski derivatives to generate strings that match multiple regex!
 
 > The plural of `regex` is `regrets`
 
@@ -10,86 +10,75 @@ Use Z3 or Brzozowski derivatives to generate strings that match multiple regex �
 
 ## Setup
 
+To use `regrets`, you need to
+
  - Clone this repository
  - Install [Poetry](https://python-poetry.org/docs/#installation)
- - Run `poetry install`
- - Invoke via `poetry run regrets` (or `poetry run python main.py`)
+ - Run `poetry install` to install all dependencies
+ - Run `regrets` via `poetry run regrets` (or `poetry run python main.py`)
 
-## Engines
+## How to use
 
-`regrets` ships two engines under separate subcommands:
+`regrets` ships two engines as subcommands:
 
-| Engine | Subcommand | Strengths |
-|--------|------------|-----------|
-| Z3 | `z3` | SMT-based; supports partial matching |
-| Brzozowski derivatives | `brzozowski` | Fast; exposes DFA, state-elimination, and step-through derivation |
+ - `z3` — SMT-based, supports partial matching
+ - `brzozowski` — derivative-based, fast, also exposes the DFA and step-through derivation
 
-Top-level help:
+Run `--help` on any subcommand to see its options.
 
-```
-$ python main.py --help
-$ python main.py z3 --help
-$ python main.py brzozowski --help
-```
+### Z3
 
-## Z3 engine
-
-Generate strings matching one or more regex (intersected):
+Generate strings that match a regex:
 
 ```
 $ python main.py z3 generate --matching "[A-Za-z0-9]{3,10}"
+
 AnP
 ```
 
-Multiple constraints:
+Multiple `--matching` intersect:
 
 ```
 $ python main.py z3 generate --matching "[A-Za-z0-9]{3,10}" --matching "abcd[0-9]+"
+
 abcd4
 ```
 
-Negative constraints (full and partial):
+Add `--not-matching` to exclude full matches, or `--not-partial-matching` to exclude substrings:
 
 ```
-$ python main.py z3 generate \
-    --matching "[A-Za-z0-9]{3,10}" \
-    --matching "abcd[0-9]+" \
-    --not-matching "[a-z]{4}[1-4]"
-abcd6
-
 $ python main.py z3 generate --matching "[A-Za-z0-9]{3,10}" --not-partial-matching "[a-z]"
+
 0KX
 ```
 
-## Brzozowski engine
+### Brzozowski
 
-Four commands on top of a shared Brzozowski-derivative core:
-
-### `generate` — sample matching strings
+Same generation style:
 
 ```
 $ python main.py brzozowski generate --matching "[a-z]+z.*" -N 3 --max-len 4
+
 az
 bz
 cz
 ```
 
-### `show` — flatten intersections and complements into a single regex
+Plus a few extras only this engine offers:
 
-Uses derivative-based DFA construction, then state elimination. The `&` / `~` meta-operators disappear — output is a plain regex.
+`show` flattens intersections and complements into a single regex (no more `&` / `~`):
 
 ```
 $ python main.py brzozowski show --matching "[a-z]+" --matching ".*z.*"
-(z|[a-y]+z)([a-z]*)
 
-$ python main.py brzozowski show --matching "[a-c]{3}" --not-matching "abc"
-ab[ab]|(a[ac]|[bc][a-c])[a-c]
+(z|[a-y]+z)([a-z]*)
 ```
 
-### `dfa` — inspect the derivative DFA
+`dfa` prints the derivative DFA:
 
 ```
 $ python main.py brzozowski dfa --matching "abc"
+
 States (4):
   0 [start]: abc
   1: bc
@@ -101,49 +90,38 @@ Transitions:
   2 --c--> 3
 ```
 
-### `derive` — step through the derivative interactively
-
-Type characters; see the residual regex and match status after each step. Empty line evaluates fullmatch on input so far.
+`derive` steps through one character at a time, showing the residual regex:
 
 ```
 $ python main.py brzozowski derive --matching "abc"
+
 start [partial]: abc
 > ab
   'a' [partial]: bc
   'b' [partial]: c
 ab> c
   'c' [MATCH]: ε
-abc>
-  ε [MATCH]: ε
-  (empty line again to exit)
 ```
 
 ### PCRE constructs
 
-The Brzozowski parser accepts a useful subset of PCRE:
+The Brzozowski engine accepts a subset of PCRE:
 
-| Construct | Semantics |
-|-----------|-----------|
-| `(?=X)` | Positional intersection: suffix matches `X` (and the rest of the regex) |
-| `(?!X)` | Positional complement: suffix does NOT match `X` |
-| `(?<=x)` / `(?<!x)` | Fixed-width-1 lookbehind (single char or character class only) |
-| `\b` / `\B` | Word / non-word boundary (expanded to dual lookaround alternation) |
+ - `(?=X)` / `(?!X)` — lookaheads (the rest of the regex is AND'd / NOT'd with `X`)
+ - `(?<=x)` / `(?<!x)` — lookbehinds, fixed-width 1 (single char or character class)
+ - `\b` / `\B` — word boundary / non-boundary
 
-Lookaheads are sugar for AND / NOT on the suffix consumed by the rest of the regex. Example — `show` flattens them into a plain regex:
+`show` flattens these like any other regex:
 
 ```
-$ python main.py brzozowski show --matching "(?=[a-z]+)(?=.*z.*).{1,4}"
-z|[a-y]{3}z|[a-y]{2}z|[a-y]z|z[a-z]|...
-
 $ python main.py brzozowski show --matching "\bword\b"
+
 word
 ```
 
-Variable-width lookbehinds raise `NotImplementedError` — on the todo list.
+### Pattern files
 
-### Reading patterns from a file
-
-Every brzozowski command accepts `--matching-file` / `--not-matching-file`. One regex per line, `#` comments and blank lines skipped:
+Pass many regex at once with `--matching-file` / `--not-matching-file` (one regex per line, `#` comments and blank lines ignored):
 
 ```
 $ cat patterns.txt
@@ -153,6 +131,7 @@ $ cat patterns.txt
 .*\d.*
 
 $ python main.py brzozowski generate --matching-file patterns.txt -N 3 --min-len 2 --max-len 4
+
 a0
 a1
 a2
@@ -160,15 +139,15 @@ a2
 
 ## Current Limitations
 
- - The Brzozowski engine supports lookaheads, fixed-width-1 lookbehinds, and word boundaries (`\b` / `\B`); variable-width lookbehinds and backreferences are not supported.
- - The Z3 parser (credits to [Andrew Helwer](https://ahelwer.ca/post/2022-01-19-z3-rbac/)) does not support all regex constructs (e.g., lazy quantifiers `*?`, `+?`, `??`). PRs welcome.
- - Z3 can be very slow on complex regex. Be patient.
- - Deterministic output: repeated Z3 runs with the same parameters yield the same samples. Bump `-N` for more variety. The Brzozowski generator performs BFS over the derivative graph and deduplicates by path.
+ - The Brzozowski engine handles lookaheads, fixed-width-1 lookbehinds, and word boundaries — variable-width lookbehinds and backreferences are not supported yet
+ - The Z3 [regex parser](engines/z3/parser.py) (credits to [Andrew Helwer](https://ahelwer.ca/post/2022-01-19-z3-rbac/) for the original code) does not support all regex constructs *at the moment* (e.g., lazy quantifiers such as `*?`, `+?`, and `??`). PRs are welcome!
+ - Z3 is very powerful, but it can sometimes be VERY (and I mean VERY) slow if the regex is very complex. Be patient :D
+ - Multiple runs of `regrets` with the same parameters will yield the same results. This is due to the deterministic nature of Z3. If you want different results, simply run `regrets` with a high `-N` parameter (an update that excludes previously seen strings is coming soon)
 
 ## How to Contribute
 
 PRs for missing features and overcoming limitations are always welcome!
 
-Any [feedback](https://github.com/AvalZ/regrets/discussions/new?category=feedback) on usability or performance is appreciated.
+But also, any [feedback](https://github.com/AvalZ/regrets/discussions/new?category=feedback) regarding usability or performance of `regrets` would be great!
 
-If you're using `regrets` in your projects, [let me know your use case](https://github.com/AvalZ/regrets/discussions/new?category=show-and-tell)!
+Also, if you're using (and possibly enjoying) `regrets` in your projects, [let me know your use case](https://github.com/AvalZ/regrets/discussions/new?category=show-and-tell)!
