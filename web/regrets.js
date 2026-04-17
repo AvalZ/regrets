@@ -5,6 +5,7 @@ const PY_FILES = [
   'engines/brzozowski/parser.py',
   'engines/brzozowski/pretty.py',
   'engines/brzozowski/dfa.py',
+  'engines/brzozowski/session.py',
 ];
 
 const CANDIDATE_BASES = ['../', './', '/'];
@@ -100,6 +101,7 @@ from engines.brzozowski.re_ast import ALL_GOOD, NO_GOOD, nullable, derive, mk_an
 from engines.brzozowski.parser import parse
 from engines.brzozowski.pretty import pretty
 from engines.brzozowski.dfa import build_dfa, dfa_to_regex, chars_to_re, PRINTABLE
+from engines.brzozowski.session import DfaBuilder
 
 
 def _split_lines(raw):
@@ -288,6 +290,18 @@ def start_derive_single(pattern):
 
 def start_derive_negated(pattern):
     return DeriveSession(mk_not(parse(pattern)))
+
+
+def make_session(matching_raw, not_matching_raw):
+    return DfaBuilder(build_re(matching_raw, not_matching_raw))
+
+
+def make_session_single(pattern):
+    return DfaBuilder(parse(pattern))
+
+
+def make_session_negated(pattern):
+    return DfaBuilder(mk_not(parse(pattern)))
 `);
 
   const api = {
@@ -299,6 +313,9 @@ def start_derive_negated(pattern):
     startDerive: pyodide.globals.get('start_derive'),
     startDeriveSingle: pyodide.globals.get('start_derive_single'),
     startDeriveNegated: pyodide.globals.get('start_derive_negated'),
+    makeSession: pyodide.globals.get('make_session'),
+    makeSessionSingle: pyodide.globals.get('make_session_single'),
+    makeSessionNegated: pyodide.globals.get('make_session_negated'),
   };
 
   setStatus('Ready.');

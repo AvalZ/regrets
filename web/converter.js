@@ -1,4 +1,5 @@
 import { boot, fmtErr, escapeHtml, tagSpan, runWithLoading } from './regrets.js';
+import { mountSessionUI } from './sessionui.js';
 
 const statusEl = document.getElementById('status');
 const form = document.getElementById('form');
@@ -11,6 +12,7 @@ const btnEof = document.getElementById('btn-eof');
 const charsEl = document.getElementById('chars');
 const consumedEl = document.getElementById('consumed');
 const outDerive = document.getElementById('out-derive');
+const sessionMount = document.getElementById('session-mount');
 
 let api = null;
 let deriveState = null;
@@ -54,6 +56,15 @@ function stepChars(s) {
   }
 }
 
+const sessionUI = mountSessionUI({
+  container: sessionMount,
+  makeSession: () => {
+    const pat = patternEl.value.trim();
+    if (!pat) throw new Error('enter a pattern first');
+    return api.makeSessionSingle(pat);
+  },
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const pat = patternEl.value.trim();
@@ -96,6 +107,7 @@ boot({ statusEl })
   .then(({ api: a }) => {
     api = a;
     [patternEl, btnConvert, btnReset, btnStep, btnEof, charsEl].forEach((el) => (el.disabled = false));
+    sessionUI.enable();
     patternEl.focus();
   })
   .catch((err) => {
