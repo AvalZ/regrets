@@ -29,19 +29,7 @@
     </fieldset>
   </div>
 
-  <fieldset style="margin-top: 1rem;">
-    <legend>merge</legend>
-    <div class="row">
-      <button id="btn-show" disabled>Show (resulting/merged regex)</button>
-      <button id="btn-dfa" disabled>build DFA</button>
-      <label style="font-size: 0.85rem; opacity: 0.85;">
-        <input type="checkbox" id="chk-compress" checked> compress linear chains
-      </label>
-      <span style="font-size: 0.8rem; opacity: 0.6;">(scroll to zoom · drag to pan)</span>
-    </div>
-    <pre id="out-show">(resulting/merged regex appears here)</pre>
-    <div id="out-dfa" class="dfa-out" style="display:none"></div>
-  </fieldset>
+  <div id="session-mount" style="margin-top: 1rem;"></div>
 
   <fieldset style="margin-top: 1rem;">
     <legend>derive step-by-step</legend>
