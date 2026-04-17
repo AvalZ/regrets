@@ -1,2 +1,0 @@
-z3-solver
-Typer
