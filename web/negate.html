@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>regrets — negate regex</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <nav>
+    <a href="./">converter</a>
+    <a href="./negate.html" class="active">negate</a>
+    <a href="./playground.html">playground</a>
+    <a href="https://github.com/AvalZ/regrets" target="_blank" rel="noopener">github</a>
+  </nav>
+
+  <div class="hero">
+    <h1>negate regex</h1>
+    <div class="sub">
+      Paste a regex, get the regex that negates it!
+    </div>
+  </div>
+
+  <div id="status">Booting Pyodide…</div>
+
+  <form id="form" class="row" style="align-items: stretch; margin-bottom: 1rem;">
+    <input type="text" id="pattern" class="big-input" placeholder="e.g. .*foo.*  or  [a-z]+" autofocus style="flex: 1;"
+      disabled>
+    <button id="btn-negate" type="submit" disabled>Negate</button>
+  </form>
+
+  <pre id="out-result">(negated regex appears here)</pre>
+
+  <fieldset style="margin-top: 1rem;">
+    <legend>Test input against the negated regex (step-by-step derive)</legend>
+    <div class="row">
+      <button id="btn-reset" disabled>reset</button>
+      <span>consumed: <span id="consumed" class="consumed"></span></span>
+      <input type="text" id="chars" placeholder="type chars, Enter to step" style="flex: 1; min-width: 10rem;" disabled>
+      <button id="btn-step" disabled>step</button>
+      <button id="btn-eof" disabled>eval fullmatch (ε)</button>
+    </div>
+    <pre id="out-derive">(negate a regex first, then test input here)</pre>
+  </fieldset>
+
+  <script src="./vendor/pyodide/pyodide.js"></script>
+  <script type="module" src="./negate.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,104 @@
+import { boot, fmtErr, escapeHtml, tagSpan, runWithLoading } from './regrets.js';
+
+const statusEl = document.getElementById('status');
+const form = document.getElementById('form');
+const patternEl = document.getElementById('pattern');
+const btnConvert = document.getElementById('btn-convert');
+const outResult = document.getElementById('out-result');
+const btnReset = document.getElementById('btn-reset');
+const btnStep = document.getElementById('btn-step');
+const btnEof = document.getElementById('btn-eof');
+const charsEl = document.getElementById('chars');
+const consumedEl = document.getElementById('consumed');
+const outDerive = document.getElementById('out-derive');
+
+let api = null;
+let deriveState = null;
+let currentPattern = '';
+
+function appendLine(html) {
+  outDerive.innerHTML += '\n' + html;
+  outDerive.scrollTop = outDerive.scrollHeight;
+}
+
+function resetDerive() {
+  if (!currentPattern) {
+    outDerive.textContent = 'Convert a regex first.';
+    return;
+  }
+  try {
+    deriveState = api.startDeriveSingle(currentPattern);
+  } catch (err) {
+    outDerive.innerHTML = `error: ${escapeHtml(fmtErr(err))}`;
+    deriveState = null;
+    return;
+  }
+  const snap = deriveState.snapshot().toJs({ dict_converter: Object.fromEntries });
+  consumedEl.textContent = '';
+  outDerive.innerHTML = `start [${tagSpan(snap.tag)}]: ${escapeHtml(snap.pretty)}`;
+  charsEl.value = '';
+  charsEl.focus();
+}
+
+function stepChars(s) {
+  if (!deriveState) {
+    resetDerive();
+    if (!deriveState) return;
+  }
+  if (!s) return;
+  for (const c of s) {
+    const r = deriveState.step(c).toJs({ dict_converter: Object.fromEntries });
+    consumedEl.textContent += c;
+    appendLine(`  '${escapeHtml(c)}' [${tagSpan(r.tag)}]: ${escapeHtml(r.pretty)}`);
+    if (r.dead) break;
+  }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pat = patternEl.value.trim();
+  if (!pat) return;
+  await runWithLoading([btnConvert], outResult, 'Building DFA and collapsing to regex', () =>
+    api.convertSingle(pat)
+  );
+  // Only set currentPattern if conversion succeeded (outResult doesn't start with "error:").
+  if (!outResult.textContent.startsWith('error:')) {
+    currentPattern = pat;
+    resetDerive();
+  }
+});
+
+btnReset.addEventListener('click', resetDerive);
+
+btnStep.addEventListener('click', () => {
+  stepChars(charsEl.value);
+  charsEl.value = '';
+  charsEl.focus();
+});
+
+btnEof.addEventListener('click', () => {
+  if (!deriveState) {
+    resetDerive();
+    if (!deriveState) return;
+  }
+  const r = deriveState.eof().toJs({ dict_converter: Object.fromEntries });
+  appendLine(`  ε [${tagSpan(r.tag)}]: ${escapeHtml(r.pretty)}`);
+});
+
+charsEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    btnStep.click();
+  }
+});
+
+boot({ statusEl })
+  .then(({ api: a }) => {
+    api = a;
+    [patternEl, btnConvert, btnReset, btnStep, btnEof, charsEl].forEach((el) => (el.disabled = false));
+    patternEl.focus();
+  })
+  .catch((err) => {
+    statusEl.textContent = 'Boot failed: ' + fmtErr(err);
+    console.error('regrets boot error:', err);
+  });

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>regrets — brzozowski playground</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <nav>
+    <a href="./">converter</a>
+    <a href="./negate.html">negate</a>
+    <a href="./playground.html" class="active">playground</a>
+    <a href="https://github.com/AvalZ/regrets" target="_blank" rel="noopener">github</a>
+  </nav>
+
+  <h1>regrets playground</h1>
+  <div class="sub">Brzozowski derivative engine, in your browser. Intersect, complement, derive.</div>
+  <div id="status">Booting Pyodide…</div>
+
+  <div class="grid">
+    <fieldset>
+      <legend>Matching (one regex per line)</legend>
+      <textarea id="matching" placeholder="[a-z]+&#10;.*z.*"></textarea>
+    </fieldset>
+    <fieldset>
+      <legend>Not Matching (one regex per line)</legend>
+      <textarea id="not-matching" placeholder=".*qq.*"></textarea>
+    </fieldset>
+  </div>
+
+  <fieldset style="margin-top: 1rem;">
+    <legend>merge</legend>
+    <div class="row">
+      <button id="btn-show" disabled>Show (resulting/merged regex)</button>
+      <button id="btn-dfa" disabled>build DFA</button>
+    </div>
+    <pre id="out-show">(resulting/merged regex appears here)</pre>
+    <pre id="out-dfa" style="display:none"></pre>
+  </fieldset>
+
+  <fieldset style="margin-top: 1rem;">
+    <legend>derive step-by-step</legend>
+    <div class="row">
+      <button id="btn-reset" disabled>reset</button>
+      <span>consumed: <span id="consumed" class="consumed"></span></span>
+      <input type="text" id="chars" placeholder="type chars, Enter to step" style="flex: 1; min-width: 10rem;" disabled>
+      <button id="btn-step" disabled>step</button>
+      <button id="btn-eof" disabled>eval fullmatch (ε)</button>
+    </div>
+    <pre id="out-derive">(derivation trace appears here)</pre>
+  </fieldset>
+
+  <script src="./vendor/pyodide/pyodide.js"></script>
+  <script type="module" src="./playground.js"></script>
+</body>
+</html>
