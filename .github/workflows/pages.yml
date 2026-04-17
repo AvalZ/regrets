@@ -26,11 +26,7 @@ jobs:
           cp -r web/. _site/
           mkdir -p _site/engines/brzozowski
           cp engines/__init__.py _site/engines/
-          cp engines/brzozowski/__init__.py _site/engines/brzozowski/
-          cp engines/brzozowski/re_ast.py _site/engines/brzozowski/
-          cp engines/brzozowski/parser.py _site/engines/brzozowski/
-          cp engines/brzozowski/pretty.py _site/engines/brzozowski/
-          cp engines/brzozowski/dfa.py _site/engines/brzozowski/
+          cp engines/brzozowski/*.py _site/engines/brzozowski/
 
       - uses: actions/configure-pages@v5
 
