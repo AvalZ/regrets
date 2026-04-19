@@ -103,6 +103,18 @@ ab> c
   'c' [MATCH]: ε
 ```
 
+Full vs partial matching — `--matching` is anchored (the whole string must match the regex); `--partial-matching` only requires the string to *contain* a match (equivalent to wrapping with `.*...*`):
+
+```
+$ python main.py brzozowski generate --matching "[a-z]{3}" --partial-matching "b" -N 3
+
+aba
+abb
+abc
+```
+
+`--not-partial-matching` excludes strings that contain the pattern anywhere. `--partial-matching-file` / `--not-partial-matching-file` take patterns-per-line files like their full-match counterparts.
+
 ### PCRE constructs
 
 The Brzozowski engine accepts a subset of PCRE:
@@ -110,6 +122,7 @@ The Brzozowski engine accepts a subset of PCRE:
  - `(?=X)` / `(?!X)` — lookaheads (the rest of the regex is AND'd / NOT'd with `X`)
  - `(?<=x)` / `(?<!x)` — lookbehinds, fixed-width 1 (single char or character class)
  - `\b` / `\B` — word boundary / non-boundary
+ - `(?i)` / `(?i:...)` — case-insensitive mode (global at the start of the pattern, or scoped to a group)
 
 `show` flattens these like any other regex:
 
@@ -139,7 +152,7 @@ a2
 
 ## Current Limitations
 
- - The Brzozowski engine handles lookaheads, fixed-width-1 lookbehinds, and word boundaries — variable-width lookbehinds and backreferences are not supported yet
+ - The Brzozowski engine handles lookaheads, variable-width lookbehinds, word boundaries, and the `(?i)` case-insensitive flag — other inline modifiers and backreferences are not supported yet
  - The Z3 [regex parser](engines/z3/parser.py) (credits to [Andrew Helwer](https://ahelwer.ca/post/2022-01-19-z3-rbac/) for the original code) does not support all regex constructs *at the moment* (e.g., lazy quantifiers such as `*?`, `+?`, and `??`). PRs are welcome!
  - Z3 is very powerful, but it can sometimes be VERY (and I mean VERY) slow if the regex is very complex. Be patient :D
  - Multiple runs of `regrets` with the same parameters will yield the same results. This is due to the deterministic nature of Z3. If you want different results, simply run `regrets` with a high `-N` parameter (an update that excludes previously seen strings is coming soon)

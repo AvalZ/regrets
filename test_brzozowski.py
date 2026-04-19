@@ -439,3 +439,66 @@ def test_cli_derive_debug_shows_ast():
     )
     assert result.exit_code == 0
     assert 'OneOf' in result.stdout
+
+
+@pytest.mark.parametrize("pattern,sample,expected", [
+    ("(?i)abc", "abc", True),
+    ("(?i)abc", "ABC", True),
+    ("(?i)abc", "aBc", True),
+    ("(?i)abc", "abd", False),
+    ("(?i)[a-c]+", "aBc", True),
+    ("(?i)[a-c]+", "aBcD", False),
+    ("(?i)[^a]", "A", False),
+    ("(?i)[^a]", "b", True),
+    ("(?i:abc)def", "ABCdef", True),
+    ("(?i:abc)def", "ABCDEF", False),
+    ("(?i:abc)def", "abcDEF", False),
+    ("(?i)a|b", "A", True),
+    ("(?i)a|b", "B", True),
+    ("(?i)a|b", "c", False),
+])
+def test_case_insensitive_flag(pattern, sample, expected):
+    assert bool(pyre.fullmatch(pattern, sample)) == expected
+    assert accepts(parse(pattern), sample) == expected
+
+
+def test_cli_generate_partial_matching_contains_substring():
+    result = runner.invoke(app, [
+        'brzozowski', 'generate',
+        '--matching', '[a-z]{3}',
+        '--partial-matching', 'b',
+        '-N', '5',
+    ])
+    assert result.exit_code == 0
+    for line in [l for l in result.stdout.splitlines() if l]:
+        assert pyre.fullmatch(r'[a-z]{3}', line)
+        assert 'b' in line
+
+
+def test_cli_generate_not_partial_matching_excludes_substring():
+    result = runner.invoke(app, [
+        'brzozowski', 'generate',
+        '--matching', '[a-c]{3}',
+        '--not-partial-matching', 'b',
+        '-N', '5',
+    ])
+    assert result.exit_code == 0
+    for line in [l for l in result.stdout.splitlines() if l]:
+        assert pyre.fullmatch(r'[a-c]{3}', line)
+        assert 'b' not in line
+
+
+def test_cli_show_partial_matching_equivalent_to_wrapping():
+    result = runner.invoke(app, [
+        'brzozowski', 'show',
+        '--matching', '[a-c]{1,3}',
+        '--partial-matching', 'b',
+    ])
+    assert result.exit_code == 0
+    out = result.stdout.strip()
+    from engines.brzozowski.re_ast import accepts as acc
+    resolved = parse(out) if out else None
+    for s in ['b', 'ab', 'bc', 'abc', 'a', 'c', 'cc', '']:
+        py = bool(pyre.fullmatch(r'[a-c]{1,3}', s)) and ('b' in s)
+        if resolved is not None:
+            assert acc(resolved, s) == py, (s, py, out)

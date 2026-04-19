@@ -17,6 +17,16 @@ _WORD = (
 _SPACE = frozenset({' ', '\t', '\n', '\r', '\f', '\v'})
 
 
+def _fold(chars: frozenset, flags: int) -> frozenset:
+    if not (flags & sre_constants.SRE_FLAG_IGNORECASE):
+        return chars
+    out = set(chars)
+    for c in chars:
+        out.add(c.lower())
+        out.add(c.upper())
+    return frozenset(out)
+
+
 def _category(node_value) -> Re:
     sc = sre_constants
     if node_value == sc.CATEGORY_DIGIT:
@@ -34,7 +44,7 @@ def _category(node_value) -> Re:
     raise NotImplementedError(f'category {node_value} not implemented')
 
 
-def _collect_in_chars(items) -> frozenset:
+def _collect_in_chars(items, flags: int) -> frozenset:
     out = set()
     for node in items:
         node_type, node_value = node
@@ -50,24 +60,25 @@ def _collect_in_chars(items) -> frozenset:
             out.update(cc.chars)
         else:
             raise NotImplementedError(f'unsupported [...] item: {node}')
-    return frozenset(out)
+    return _fold(frozenset(out), flags)
 
 
-def _construct_to_re(node) -> Re:
+def _construct_to_re(node, flags: int) -> Re:
     sc = sre_constants
     node_type, node_value = node
     if node_type == sc.LITERAL:
-        return OneOf(CharClass(frozenset({chr(node_value)}), negated=False))
+        return OneOf(CharClass(_fold(frozenset({chr(node_value)}), flags), negated=False))
     if node_type == sc.NOT_LITERAL:
-        return OneOf(CharClass(frozenset({chr(node_value)}), negated=True))
+        return OneOf(CharClass(_fold(frozenset({chr(node_value)}), flags), negated=True))
     if node_type == sc.SUBPATTERN:
-        _, _, _, value = node_value
-        return regex_to_re(value)
+        _, add_flags, del_flags, value = node_value
+        sub_flags = (flags | add_flags) & ~del_flags
+        return regex_to_re(value, sub_flags)
     if node_type == sc.ANY:
         return OneOf(CharClass(frozenset(), negated=True))
     if node_type == sc.MAX_REPEAT:
         low, high, value = node_value
-        inner = regex_to_re(value)
+        inner = regex_to_re(value, flags)
         if (low, high) == (0, sc.MAXREPEAT):
             return mk_kleene(inner)
         if (low, high) == (1, sc.MAXREPEAT):
@@ -85,16 +96,16 @@ def _construct_to_re(node) -> Re:
             return _category(node_value[0][1])
         first_subnode_type, _ = node_value[0]
         if first_subnode_type == sc.NEGATE:
-            chars = _collect_in_chars(node_value[1:])
+            chars = _collect_in_chars(node_value[1:], flags)
             return OneOf(CharClass(chars, negated=True))
-        chars = _collect_in_chars(node_value)
+        chars = _collect_in_chars(node_value, flags)
         return OneOf(CharClass(chars, negated=False))
     if node_type == sc.BRANCH:
         _, value = node_value
-        return mk_or([regex_to_re(v) for v in value])
+        return mk_or([regex_to_re(v, flags) for v in value])
     if node_type == sc.RANGE:
         low, high = node_value
-        return OneOf(CharClass(frozenset(chr(c) for c in range(low, high + 1)), negated=False))
+        return OneOf(CharClass(_fold(frozenset(chr(c) for c in range(low, high + 1)), flags), negated=False))
     if node_type == sc.CATEGORY:
         return _category(node_value)
     raise NotImplementedError(f'regex construct {node} not implemented')
@@ -120,13 +131,13 @@ def _boundary(suffix: Re, negated: bool) -> Re:
     return mk_or([alt_after_word, alt_before_word])
 
 
-def regex_to_re(parsed: sre_parse.SubPattern) -> Re:
+def regex_to_re(parsed: sre_parse.SubPattern, flags: int = 0) -> Re:
     if not parsed.data:
         raise ValueError('regex is empty')
-    return _build_seq(list(parsed.data))
+    return _build_seq(list(parsed.data), flags)
 
 
-def _build_seq(items) -> Re:
+def _build_seq(items, flags: int) -> Re:
     sc = sre_constants
     prefix = []
     i = 0
@@ -134,7 +145,7 @@ def _build_seq(items) -> Re:
         node_type, node_value = items[i]
         if node_type == sc.AT:
             if node_value == sc.AT_BOUNDARY or node_value == sc.AT_NON_BOUNDARY:
-                suffix = _build_seq(items[i + 1:])
+                suffix = _build_seq(items[i + 1:], flags)
                 prefix.append(_boundary(suffix, negated=(node_value == sc.AT_NON_BOUNDARY)))
                 return prefix[0] if len(prefix) == 1 else mk_cat(prefix)
             raise NotImplementedError(f'regex anchor {node_value} not implemented')
@@ -142,7 +153,7 @@ def _build_seq(items) -> Re:
             lookahead_constraints = []
             while i < len(items) and items[i][0] in (sc.ASSERT, sc.ASSERT_NOT):
                 a_type, (direction, sub) = items[i]
-                body = regex_to_re(sub)
+                body = regex_to_re(sub, flags)
                 if direction == 1:
                     lookahead_constraints.append(mk_not(body) if a_type == sc.ASSERT_NOT else body)
                 elif direction == -1:
@@ -151,12 +162,12 @@ def _build_seq(items) -> Re:
                     raise NotImplementedError(f'assertion direction {direction}')
                 i += 1
             if lookahead_constraints:
-                suffix = _build_seq(items[i:])
+                suffix = _build_seq(items[i:], flags)
                 constrained = mk_and([suffix] + lookahead_constraints)
                 prefix.append(constrained)
                 return prefix[0] if len(prefix) == 1 else mk_cat(prefix)
             continue
-        prefix.append(_construct_to_re(items[i]))
+        prefix.append(_construct_to_re(items[i], flags))
         i += 1
     if not prefix:
         return EPS
@@ -164,4 +175,5 @@ def _build_seq(items) -> Re:
 
 
 def parse(pattern: str) -> Re:
-    return regex_to_re(sre_parse.parse(pattern))
+    parsed = sre_parse.parse(pattern)
+    return regex_to_re(parsed, parsed.state.flags)

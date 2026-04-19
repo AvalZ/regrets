@@ -9,7 +9,7 @@ import typer
 from typing_extensions import Annotated
 
 from engines.brzozowski.re_ast import (
-    Re, ALL_GOOD, NO_GOOD, EPS, mk_and, mk_not, nullable,
+    Re, ALL_GOOD, NO_GOOD, EPS, mk_and, mk_cat, mk_not, nullable,
 )
 from engines.brzozowski.re_ast import derive as deriv
 from engines.brzozowski.parser import parse
@@ -33,16 +33,29 @@ def _read_patterns(path: Optional[Path]) -> List[str]:
     return out
 
 
+def _wrap_partial(re: Re) -> Re:
+    """Wrap as .*re.* so the string only has to contain a match, not equal it."""
+    return mk_cat([ALL_GOOD, re, ALL_GOOD])
+
+
 def _build(
     matching: List[str],
     not_matching: List[str],
     matching_file: Optional[Path] = None,
     not_matching_file: Optional[Path] = None,
+    partial_matching: Optional[List[str]] = None,
+    not_partial_matching: Optional[List[str]] = None,
+    partial_matching_file: Optional[Path] = None,
+    not_partial_matching_file: Optional[Path] = None,
 ) -> Re:
     all_matching = list(matching) + _read_patterns(matching_file)
     all_not_matching = list(not_matching) + _read_patterns(not_matching_file)
+    all_partial = list(partial_matching or []) + _read_patterns(partial_matching_file)
+    all_not_partial = list(not_partial_matching or []) + _read_patterns(not_partial_matching_file)
     parts: List[Re] = [parse(m) for m in all_matching]
     parts += [mk_not(parse(m)) for m in all_not_matching]
+    parts += [_wrap_partial(parse(m)) for m in all_partial]
+    parts += [mk_not(_wrap_partial(parse(m))) for m in all_not_partial]
     if not parts:
         return ALL_GOOD
     return mk_and(parts)
@@ -50,6 +63,10 @@ def _build(
 
 _MATCHING_FILE_HELP = "Path to file; one regex per line (# comments, blank lines skipped). Intersected with --matching."
 _NOT_MATCHING_FILE_HELP = "Path to file; one regex per line (# comments, blank lines skipped). Each complemented and intersected."
+_PARTIAL_MATCHING_HELP = "Regex the string must contain (anywhere). Equivalent to wrapping with .*...*."
+_NOT_PARTIAL_MATCHING_HELP = "Regex the string must NOT contain anywhere."
+_PARTIAL_MATCHING_FILE_HELP = "Path to file; one regex per line (# comments, blank lines skipped). Each wrapped as .*...* and intersected."
+_NOT_PARTIAL_MATCHING_FILE_HELP = "Path to file; one regex per line (# comments, blank lines skipped). Each wrapped as .*...*, complemented, and intersected."
 
 
 def _show(re: Re, debug: bool) -> str:
@@ -90,13 +107,21 @@ def _spinner(message: str):
 def generate(
         matching: Annotated[List[str], typer.Option(help="String must fully match these regex (intersected)")] = [],
         not_matching: Annotated[List[str], typer.Option(help="String must NOT fully match these regex")] = [],
+        partial_matching: Annotated[List[str], typer.Option('--partial-matching', help=_PARTIAL_MATCHING_HELP)] = [],
+        not_partial_matching: Annotated[List[str], typer.Option('--not-partial-matching', help=_NOT_PARTIAL_MATCHING_HELP)] = [],
         matching_file: Annotated[Optional[Path], typer.Option('--matching-file', help=_MATCHING_FILE_HELP)] = None,
         not_matching_file: Annotated[Optional[Path], typer.Option('--not-matching-file', help=_NOT_MATCHING_FILE_HELP)] = None,
+        partial_matching_file: Annotated[Optional[Path], typer.Option('--partial-matching-file', help=_PARTIAL_MATCHING_FILE_HELP)] = None,
+        not_partial_matching_file: Annotated[Optional[Path], typer.Option('--not-partial-matching-file', help=_NOT_PARTIAL_MATCHING_FILE_HELP)] = None,
         min_len: Annotated[int, typer.Option('--min-len')] = 1,
         max_len: Annotated[int, typer.Option('--max-len')] = 20,
         N: Annotated[int, typer.Option('-N', help="Number of samples")] = 1,
     ):
-    re = _build(matching, not_matching, matching_file, not_matching_file)
+    re = _build(
+        matching, not_matching, matching_file, not_matching_file,
+        partial_matching, not_partial_matching,
+        partial_matching_file, not_partial_matching_file,
+    )
     found = False
     for s in gen_strings(re, n=N, min_len=min_len, max_len=max_len):
         found = True
@@ -109,12 +134,20 @@ def generate(
 def show(
         matching: Annotated[List[str], typer.Option(help="Regex to intersect")] = [],
         not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
+        partial_matching: Annotated[List[str], typer.Option('--partial-matching', help=_PARTIAL_MATCHING_HELP)] = [],
+        not_partial_matching: Annotated[List[str], typer.Option('--not-partial-matching', help=_NOT_PARTIAL_MATCHING_HELP)] = [],
         matching_file: Annotated[Optional[Path], typer.Option('--matching-file', help=_MATCHING_FILE_HELP)] = None,
         not_matching_file: Annotated[Optional[Path], typer.Option('--not-matching-file', help=_NOT_MATCHING_FILE_HELP)] = None,
+        partial_matching_file: Annotated[Optional[Path], typer.Option('--partial-matching-file', help=_PARTIAL_MATCHING_FILE_HELP)] = None,
+        not_partial_matching_file: Annotated[Optional[Path], typer.Option('--not-partial-matching-file', help=_NOT_PARTIAL_MATCHING_FILE_HELP)] = None,
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
     """Resolve via Brzozowski derivatives: build DFA then collapse with state elimination."""
-    re = _build(matching, not_matching, matching_file, not_matching_file)
+    re = _build(
+        matching, not_matching, matching_file, not_matching_file,
+        partial_matching, not_partial_matching,
+        partial_matching_file, not_partial_matching_file,
+    )
     with _spinner('Building DFA and collapsing to regex'):
         states, transitions, accepts, start_id = build_dfa(re)
         result = dfa_to_regex(states, transitions, accepts, start_id)
@@ -125,12 +158,20 @@ def show(
 def dfa(
         matching: Annotated[List[str], typer.Option(help="Regex to intersect")] = [],
         not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
+        partial_matching: Annotated[List[str], typer.Option('--partial-matching', help=_PARTIAL_MATCHING_HELP)] = [],
+        not_partial_matching: Annotated[List[str], typer.Option('--not-partial-matching', help=_NOT_PARTIAL_MATCHING_HELP)] = [],
         matching_file: Annotated[Optional[Path], typer.Option('--matching-file', help=_MATCHING_FILE_HELP)] = None,
         not_matching_file: Annotated[Optional[Path], typer.Option('--not-matching-file', help=_NOT_MATCHING_FILE_HELP)] = None,
+        partial_matching_file: Annotated[Optional[Path], typer.Option('--partial-matching-file', help=_PARTIAL_MATCHING_FILE_HELP)] = None,
+        not_partial_matching_file: Annotated[Optional[Path], typer.Option('--not-partial-matching-file', help=_NOT_PARTIAL_MATCHING_FILE_HELP)] = None,
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST for each state instead of pretty-printed regex")] = False,
     ):
     """Build the DFA via Brzozowski derivatives and print its states and transitions."""
-    re = _build(matching, not_matching, matching_file, not_matching_file)
+    re = _build(
+        matching, not_matching, matching_file, not_matching_file,
+        partial_matching, not_partial_matching,
+        partial_matching_file, not_partial_matching_file,
+    )
     with _spinner('Building DFA'):
         states, transitions, accepts, start_id = build_dfa(re)
     print(f"States ({len(states)}):")
@@ -164,11 +205,19 @@ def _final_tag(re: Re) -> str:
 def derive(
         matching: Annotated[List[str], typer.Option(help="Regex to derive against (intersected if multiple)")] = [],
         not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
+        partial_matching: Annotated[List[str], typer.Option('--partial-matching', help=_PARTIAL_MATCHING_HELP)] = [],
+        not_partial_matching: Annotated[List[str], typer.Option('--not-partial-matching', help=_NOT_PARTIAL_MATCHING_HELP)] = [],
         matching_file: Annotated[Optional[Path], typer.Option('--matching-file', help=_MATCHING_FILE_HELP)] = None,
         not_matching_file: Annotated[Optional[Path], typer.Option('--not-matching-file', help=_NOT_MATCHING_FILE_HELP)] = None,
+        partial_matching_file: Annotated[Optional[Path], typer.Option('--partial-matching-file', help=_PARTIAL_MATCHING_FILE_HELP)] = None,
+        not_partial_matching_file: Annotated[Optional[Path], typer.Option('--not-partial-matching-file', help=_NOT_PARTIAL_MATCHING_FILE_HELP)] = None,
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
-    re = _build(matching, not_matching, matching_file, not_matching_file)
+    re = _build(
+        matching, not_matching, matching_file, not_matching_file,
+        partial_matching, not_partial_matching,
+        partial_matching_file, not_partial_matching_file,
+    )
     print(f"start [{_tag(re)}]: {_show(re, debug)}")
     print('Enter chars (multi-char input replays one at a time).')
     print('Empty line: evaluate fullmatch on input so far. Empty line again to exit; or Ctrl-D.')
@@ -257,13 +306,21 @@ def _print_frontier(b: DfaBuilder, debug: bool) -> None:
 def session(
         matching: Annotated[List[str], typer.Option(help="Regex to intersect")] = [],
         not_matching: Annotated[List[str], typer.Option(help="Regex whose complement is intersected")] = [],
+        partial_matching: Annotated[List[str], typer.Option('--partial-matching', help=_PARTIAL_MATCHING_HELP)] = [],
+        not_partial_matching: Annotated[List[str], typer.Option('--not-partial-matching', help=_NOT_PARTIAL_MATCHING_HELP)] = [],
         matching_file: Annotated[Optional[Path], typer.Option('--matching-file', help=_MATCHING_FILE_HELP)] = None,
         not_matching_file: Annotated[Optional[Path], typer.Option('--not-matching-file', help=_NOT_MATCHING_FILE_HELP)] = None,
+        partial_matching_file: Annotated[Optional[Path], typer.Option('--partial-matching-file', help=_PARTIAL_MATCHING_FILE_HELP)] = None,
+        not_partial_matching_file: Annotated[Optional[Path], typer.Option('--not-partial-matching-file', help=_NOT_PARTIAL_MATCHING_FILE_HELP)] = None,
         bfs: Annotated[int, typer.Option('--bfs', help="Initial symbolic BFS expansion depth")] = 0,
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
     """Incremental DFA builder. Grow symbolically (BFS) or pick frontier states to expand with concrete chars."""
-    re = _build(matching, not_matching, matching_file, not_matching_file)
+    re = _build(
+        matching, not_matching, matching_file, not_matching_file,
+        partial_matching, not_partial_matching,
+        partial_matching_file, not_partial_matching_file,
+    )
     b = DfaBuilder(re)
     if bfs > 0:
         b.expand_bfs(bfs)
