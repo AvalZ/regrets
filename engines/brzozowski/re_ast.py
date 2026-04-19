@@ -48,14 +48,14 @@ class ReNot(Re):
     r: Re
 
 
-# Fixed-width 1 lookbehind: predicate over the last consumed character.
-# state ∈ {'start', 'in', 'out'}: 'start' = no char consumed yet; 'in' = last char ∈ cc; 'out' = last char ∉ cc.
-# nullable iff (negated and state in {'start','out'}) or (not negated and state == 'in').
+# Variable-width lookbehind.
+# `pattern` is the original body regex; `monitor` tracks the derivative state of `.*pattern`
+# as characters are consumed.  nullable iff the consumed prefix ends with a match for pattern.
 @dataclass(frozen=True)
 class LookBehind(Re):
-    cc: CharClass
+    pattern: Re
+    monitor: Re
     negated: bool
-    state: str = 'start'
 
 
 NO_GOOD: Re = OneOf(CharClass(frozenset(), negated=False))
@@ -78,8 +78,8 @@ def nullable(re: Re) -> bool:
         return not nullable(re.r)
     if isinstance(re, LookBehind):
         if re.negated:
-            return re.state in ('start', 'out')
-        return re.state == 'in'
+            return not nullable(re.monitor)
+        return nullable(re.monitor)
     raise TypeError(re)
 
 
@@ -150,15 +150,20 @@ def mk_not(r: Re) -> Re:
     return ReNot(r)
 
 
+def mk_lookbehind(pattern: Re, negated: bool) -> LookBehind:
+    monitor = mk_cat([ALL_GOOD, pattern])
+    return LookBehind(pattern, monitor, negated)
+
+
 def _advance_lbs(re: Re, c: str) -> Re:
-    """Walk AST, updating every LookBehind.state to reflect that `c` was just consumed.
-    LB state holds the class of the most recent char in the derivation path; every derive
-    step advances all surviving LBs by one character."""
+    """Walk AST, advancing every LookBehind.monitor by deriving with `c`.
+    The monitor tracks the derivative state of `.*pattern`; nullable iff the consumed
+    prefix ends with a match for pattern."""
     if isinstance(re, LookBehind):
-        new_state = 'in' if re.cc.contains(c) else 'out'
-        if new_state == re.state:
+        new_monitor = _derive_raw(c, re.monitor)
+        if new_monitor == re.monitor:
             return re
-        return LookBehind(re.cc, re.negated, new_state)
+        return LookBehind(re.pattern, new_monitor, re.negated)
     if isinstance(re, OneOf):
         return re
     if isinstance(re, Kleene):

@@ -2,8 +2,8 @@ import sre_constants
 import sre_parse
 
 from engines.brzozowski.re_ast import (
-    Re, OneOf, CharClass, EPS, ALL_GOOD, LookBehind,
-    mk_cat, mk_or, mk_kleene, mk_and, mk_not,
+    Re, OneOf, CharClass, EPS, ALL_GOOD,
+    mk_cat, mk_or, mk_kleene, mk_and, mk_not, mk_lookbehind,
 )
 
 
@@ -105,17 +105,17 @@ _WORD_CLASS = CharClass(_WORD, negated=False)
 
 def _boundary(suffix: Re, negated: bool) -> Re:
     """Encode \\b (negated=False) or \\B (negated=True) at a position whose remaining regex is `suffix`.
-    \\b = (?<=\\w)(?!\\w) | (?=\\w)(?<!\\w). Each alternative has a fixed-width LookBehind plus a
+    \\b = (?<=\\w)(?!\\w) | (?=\\w)(?<!\\w). Each alternative has a LookBehind plus a
     suffix-shape constraint: "suffix starts with \\w" is `\\w·.*`; its negation handles end-of-input."""
     word_prefix = mk_cat([OneOf(_WORD_CLASS), ALL_GOOD])
     starts_word = mk_and([suffix, word_prefix])
     starts_non_word = mk_and([suffix, mk_not(word_prefix)])
-    alt_after_word = mk_cat([LookBehind(_WORD_CLASS, negated=False), starts_non_word])
-    alt_before_word = mk_cat([LookBehind(_WORD_CLASS, negated=True), starts_word])
+    alt_after_word = mk_cat([mk_lookbehind(OneOf(_WORD_CLASS), negated=False), starts_non_word])
+    alt_before_word = mk_cat([mk_lookbehind(OneOf(_WORD_CLASS), negated=True), starts_word])
     if negated:
         # \B: either both sides word, or both sides non-word.
-        alt_in_word = mk_cat([LookBehind(_WORD_CLASS, negated=False), starts_word])
-        alt_between_non = mk_cat([LookBehind(_WORD_CLASS, negated=True), starts_non_word])
+        alt_in_word = mk_cat([mk_lookbehind(OneOf(_WORD_CLASS), negated=False), starts_word])
+        alt_between_non = mk_cat([mk_lookbehind(OneOf(_WORD_CLASS), negated=True), starts_non_word])
         return mk_or([alt_in_word, alt_between_non])
     return mk_or([alt_after_word, alt_before_word])
 
@@ -146,9 +146,7 @@ def _build_seq(items) -> Re:
                 if direction == 1:
                     lookahead_constraints.append(mk_not(body) if a_type == sc.ASSERT_NOT else body)
                 elif direction == -1:
-                    if not isinstance(body, OneOf):
-                        raise NotImplementedError('variable-width lookbehind not supported')
-                    prefix.append(LookBehind(body.cc, negated=(a_type == sc.ASSERT_NOT)))
+                    prefix.append(mk_lookbehind(body, negated=(a_type == sc.ASSERT_NOT)))
                 else:
                     raise NotImplementedError(f'assertion direction {direction}')
                 i += 1

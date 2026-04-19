@@ -41,7 +41,7 @@ def _pretty(re: Re, ctx: int) -> str:
     if isinstance(re, ReNot):
         return _wrap('~' + _pretty(re.r, P_ATOM), P_STAR, ctx)
     if isinstance(re, LookBehind):
-        body = _format_charclass(re.cc)
+        body = _pretty(re.pattern, P_OR)
         head = '(?<!' if re.negated else '(?<='
         return head + body + ')'
     return repr(re)

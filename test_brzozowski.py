@@ -331,9 +331,44 @@ def test_lookahead_is_positional():
     assert not accepts(parse(r"a(?!b)b"), "ab")  # suffix "b" matches "b", negated fails
 
 
-def test_variable_width_lookbehind_rejected():
-    with pytest.raises(NotImplementedError):
-        parse(r"(?<=ab)c")
+def test_fixed_width_multichar_lookbehind():
+    # (?<=ab)c : prev two chars are 'ab', then 'c'.
+    assert accepts(parse(r"ab(?<=ab)c"), "abc") is True
+    assert accepts(parse(r"a(?<=ab)c"), "abc") is False     # only one char consumed before LB
+    assert accepts(parse(r"xb(?<=ab)c"), "xbc") is False    # prev two are 'xb', not 'ab'
+    assert accepts(parse(r"..(?<=ab)c"), "abc") is True
+    assert accepts(parse(r"..(?<=ab)c"), "bac") is False
+    # negative
+    assert accepts(parse(r"ab(?<!ab)c"), "abc") is False
+    assert accepts(parse(r"xb(?<!ab)c"), "xbc") is True
+
+
+def test_variable_width_alternation_lookbehind():
+    # (?<=a|bb): prev ends in 'a' or 'bb' (different widths).
+    assert accepts(parse(r"a(?<=a|bb)c"), "ac") is True
+    assert accepts(parse(r"bb(?<=a|bb)c"), "bbc") is True
+    assert accepts(parse(r"ab(?<=a|bb)c"), "abc") is False  # prefix 'ab' ends in 'b', not 'a' or 'bb'
+    assert accepts(parse(r"xb(?<=a|bb)c"), "xbc") is False
+
+
+def test_quantified_lookbehind():
+    # (?<=a+): prev ends in one or more a's.
+    assert accepts(parse(r"a(?<=a+)b"), "ab") is True
+    assert accepts(parse(r"aa(?<=a+)b"), "aab") is True
+    assert accepts(parse(r"aaa(?<=a+)b"), "aaab") is True
+    assert accepts(parse(r"x(?<=a+)b"), "xb") is False
+    assert accepts(parse(r"xa(?<=a+)b"), "xab") is True   # ends in 'a'
+    # (?<=a*): always satisfied (a* matches empty).
+    assert accepts(parse(r"(?<=a*)b"), "b") is True
+    assert accepts(parse(r"x(?<=a*)b"), "xb") is True
+
+
+def test_variable_width_negative_lookbehind():
+    # (?<!ab): prev does NOT end in 'ab'.
+    assert accepts(parse(r"ab(?<!ab)c"), "abc") is False
+    assert accepts(parse(r"xb(?<!ab)c"), "xbc") is True
+    assert accepts(parse(r"(?<!ab)c"), "c") is True       # at start, no prefix to end in 'ab'
+    assert accepts(parse(r"a(?<!ab)c"), "ac") is True     # 'a' doesn't end in 'ab'
 
 
 def test_fixed_width_lookbehind():
@@ -362,9 +397,14 @@ def test_word_boundary():
 @pytest.mark.parametrize("pattern", [
     r"\bword\b", r"\b\w+\b", r"foo\Bbar", r"(?<=a)b", r"(?<!a)b",
     r"\ba", r"a\b", r"\b\d+\b", r"(?<=[A-Z])[a-z]+",
+    # Fixed-width multichar — Python supports these too.
+    r"ab(?<=ab)c", r"ab(?<!ab)c", r"..(?<=ab)c", r"\w\w(?<=ab)c",
+    # Same-width alternation — Python supports.
+    r".(?<=a|b)c",
 ])
 def test_lookbehind_matches_python_re(pattern):
-    strings = ['', 'word', 'wordx', 'xword', 'foobar', 'foo bar', 'ab', 'xb', 'a', 'Ab', 'Abcd', '123', 'a1', '1a', '_x']
+    strings = ['', 'word', 'wordx', 'xword', 'foobar', 'foo bar', 'ab', 'xb', 'a', 'Ab', 'Abcd', '123', 'a1', '1a', '_x',
+               'abc', 'xbc', 'aac', 'bac', 'ac', 'bc']
     r = parse(pattern)
     for s in strings:
         assert accepts(r, s) == bool(pyre.fullmatch(pattern, s)), f"{pattern!r} on {s!r}"
