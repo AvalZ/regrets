@@ -6,6 +6,7 @@ const PY_FILES = [
   'engines/brzozowski/pretty.py',
   'engines/brzozowski/dfa.py',
   'engines/brzozowski/session.py',
+  'engines/brzozowski/derive_session.py',
 ];
 
 const CANDIDATE_BASES = ['../', './', '/'];
@@ -102,6 +103,7 @@ from engines.brzozowski.parser import parse
 from engines.brzozowski.pretty import pretty
 from engines.brzozowski.dfa import build_dfa, dfa_to_regex, chars_to_re, PRINTABLE
 from engines.brzozowski.session import DfaBuilder
+from engines.brzozowski.derive_session import DeriveSession
 
 
 def _split_lines(raw):
@@ -245,39 +247,6 @@ def dfa_dot(matching_raw, not_matching_raw, compress=True):
         lines.append(f'  {src} -> {dst} [label="{label}"];')
     lines.append('}')
     return '\\n'.join(lines)
-
-
-def _tag(re):
-    if re == NO_GOOD:
-        return 'DEAD'
-    return 'MATCH' if nullable(re) else 'partial'
-
-
-def _final_tag(re):
-    return 'MATCH' if nullable(re) else 'DEAD'
-
-
-class DeriveSession:
-    def __init__(self, re):
-        self.re = re
-        self.consumed = ''
-        self.dead = False
-
-    def snapshot(self):
-        return {'consumed': self.consumed, 'pretty': pretty(self.re), 'tag': _tag(self.re), 'dead': self.dead}
-
-    def step(self, c):
-        if self.dead:
-            return {'char': c, 'pretty': pretty(self.re), 'tag': 'DEAD', 'dead': True}
-        self.re = derive(c, self.re)
-        self.consumed += c
-        if self.re == NO_GOOD:
-            self.dead = True
-            return {'char': c, 'pretty': '∅', 'tag': 'DEAD', 'dead': True}
-        return {'char': c, 'pretty': pretty(self.re), 'tag': _tag(self.re), 'dead': False}
-
-    def eof(self):
-        return {'pretty': pretty(self.re), 'tag': _final_tag(self.re)}
 
 
 def start_derive(matching_raw, not_matching_raw):

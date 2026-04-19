@@ -17,6 +17,7 @@ from engines.brzozowski.pretty import pretty
 from engines.brzozowski.generator import generate as gen_strings
 from engines.brzozowski.dfa import build_dfa, dfa_to_regex, chars_to_re, PRINTABLE
 from engines.brzozowski.session import DfaBuilder, parse_char_class
+from engines.brzozowski.derive_session import DeriveSession
 
 
 app = typer.Typer(help="Brzozowski derivative-based generation and interactive derivation.")
@@ -169,37 +170,53 @@ def derive(
         debug: Annotated[bool, typer.Option('--debug', help="Show internal AST instead of pretty-printed regex")] = False,
     ):
     re = _build(matching, not_matching, matching_file, not_matching_file)
-    print(f"start [{_tag(re)}]: {_show(re, debug)}")
+    sess = DeriveSession(re)
+    print(f"start [{_tag(sess.re)}]: {_show(sess.re, debug)}")
     print('Enter chars (multi-char input replays one at a time).')
+    print('Commands: :back/:b undo · :fwd/:f redo · :reset/:r restart.')
     print('Empty line: evaluate fullmatch on input so far. Empty line again to exit; or Ctrl-D.')
-    consumed = ''
     pending_exit = False
     while True:
         try:
-            s = input(f'{consumed}> ')
+            s = input(f'{sess.consumed}> ')
         except EOFError:
             print()
             break
         if not s:
-            tag = _final_tag(re)
-            print(f'  ε [{tag}]: {_show(re, debug)}')
+            tag = _final_tag(sess.re)
+            print(f'  ε [{tag}]: {_show(sess.re, debug)}')
             if pending_exit:
                 break
             print('  (empty line again to exit)')
             pending_exit = True
             continue
         pending_exit = False
-        dead = False
+        cmd = s.strip().lower()
+        if cmd in (':back', ':b'):
+            if sess.back():
+                print(f"  [BACK] now '{sess.consumed}' [{_tag(sess.re)}]: {_show(sess.re, debug)}")
+            else:
+                print('  (nothing to undo)')
+            continue
+        if cmd in (':fwd', ':f', ':forward'):
+            if sess.forward():
+                print(f"  [FWD] now '{sess.consumed}' [{_tag(sess.re)}]: {_show(sess.re, debug)}")
+            else:
+                print('  (nothing to redo)')
+            continue
+        if cmd in (':reset', ':r'):
+            sess.reset()
+            print(f"  [RESET] [{_tag(sess.re)}]: {_show(sess.re, debug)}")
+            continue
         for c in s:
-            re = deriv(c, re)
-            consumed += c
-            if re == NO_GOOD:
-                print(f"  '{c}' [DEAD] at pos {len(consumed) - 1} — regex broken")
-                dead = True
+            if sess.dead:
+                print(f"  '{c}' ignored — DEAD; :back to undo, :reset to restart")
                 break
-            print(f"  '{c}' [{_tag(re)}]: {_show(re, debug)}")
-        if dead:
-            return
+            sess.step(c)
+            if sess.dead:
+                print(f"  '{c}' [DEAD] at pos {len(sess.consumed) - 1} — :back to undo, :reset to restart")
+                break
+            print(f"  '{c}' [{_tag(sess.re)}]: {_show(sess.re, debug)}")
 
 
 _SESSION_HELP = """\
