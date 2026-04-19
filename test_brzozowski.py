@@ -243,6 +243,98 @@ def test_cli_derive_pending_exit_requires_two_empties():
     assert '(empty line again to exit)' in result.stdout
 
 
+def test_derive_session_back_forward_reset():
+    from engines.brzozowski.derive_session import DeriveSession
+    s = DeriveSession(parse('abc'))
+    assert s.snapshot()['can_back'] is False
+    s.step('a'); s.step('b')
+    assert s.consumed == 'ab'
+    snap = s.snapshot()
+    assert snap['can_back'] is True and snap['can_forward'] is False
+    assert s.back() is True
+    assert s.consumed == 'a'
+    assert s.snapshot()['can_forward'] is True
+    assert s.forward() is True
+    assert s.consumed == 'ab'
+    # Branching invalidates redo: step a new char after back clears _redo.
+    s.back()
+    s.step('x')  # diverges from 'b'; goes DEAD ('abc' doesn't accept 'ax')
+    assert s.dead is True
+    assert s.snapshot()['can_forward'] is False
+    # Recover via back.
+    s.back()
+    assert s.dead is False
+    assert s.consumed == 'a'
+    # Reset clears everything.
+    s.reset()
+    assert s.consumed == '' and not s.dead
+    assert s.snapshot()['can_back'] is False and s.snapshot()['can_forward'] is False
+
+
+def test_derive_session_back_at_start_is_noop():
+    from engines.brzozowski.derive_session import DeriveSession
+    s = DeriveSession(parse('abc'))
+    assert s.back() is False
+    assert s.forward() is False
+
+
+def test_derive_session_step_when_dead_is_noop():
+    from engines.brzozowski.derive_session import DeriveSession
+    s = DeriveSession(parse('abc'))
+    s.step('x')  # immediate dead
+    assert s.dead is True
+    consumed_before = s.consumed
+    r = s.step('y')  # should be no-op
+    assert r['dead'] is True
+    assert s.consumed == consumed_before
+
+
+def test_cli_derive_back_command():
+    # Type 'ab', back, evaluate fullmatch — should report partial 'a' (not match yet).
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='ab\n:back\n\n\n',
+    )
+    assert result.exit_code == 0
+    assert '[BACK]' in result.stdout
+    # After back, prompt prefix is 'a>' (one char rolled back).
+    assert 'a>' in result.stdout
+
+
+def test_cli_derive_back_recovers_from_dead():
+    # Hit DEAD, then :back — session should still be alive.
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='abx\n:back\n\n\n',
+    )
+    assert result.exit_code == 0
+    assert 'DEAD' in result.stdout
+    assert '[BACK]' in result.stdout
+
+
+def test_cli_derive_forward_command():
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='ab\n:back\n:fwd\n\n\n',
+    )
+    assert result.exit_code == 0
+    assert '[BACK]' in result.stdout
+    assert '[FWD]' in result.stdout
+
+
+def test_cli_derive_reset_command():
+    result = runner.invoke(
+        app,
+        ['brzozowski', 'derive', '--matching', 'abc'],
+        input='ab\n:reset\n\n\n',
+    )
+    assert result.exit_code == 0
+    assert '[RESET]' in result.stdout
+
+
 def test_cli_show_resolves_to_dfa_regex():
     # DFA resolution should flatten [a-z]+ ∧ .*z.* to a single regex with a z in it.
     result = runner.invoke(app, [

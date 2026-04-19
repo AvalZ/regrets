@@ -7,6 +7,8 @@ const patternEl = document.getElementById('pattern');
 const btnNegate = document.getElementById('btn-negate');
 const outResult = document.getElementById('out-result');
 const btnReset = document.getElementById('btn-reset');
+const btnBack = document.getElementById('btn-back');
+const btnForward = document.getElementById('btn-forward');
 const btnStep = document.getElementById('btn-step');
 const btnEof = document.getElementById('btn-eof');
 const charsEl = document.getElementById('chars');
@@ -23,6 +25,18 @@ function appendLine(html) {
   outDerive.scrollTop = outDerive.scrollHeight;
 }
 
+function refreshNav() {
+  if (!deriveState) {
+    btnBack.disabled = true;
+    btnForward.disabled = true;
+    return;
+  }
+  const snap = deriveState.snapshot().toJs({ dict_converter: Object.fromEntries });
+  consumedEl.textContent = snap.consumed;
+  btnBack.disabled = !snap.can_back;
+  btnForward.disabled = !snap.can_forward;
+}
+
 function resetDerive() {
   if (!currentPattern) {
     outDerive.textContent = 'Negate a regex first.';
@@ -33,11 +47,12 @@ function resetDerive() {
   } catch (err) {
     outDerive.innerHTML = `error: ${escapeHtml(fmtErr(err))}`;
     deriveState = null;
+    refreshNav();
     return;
   }
   const snap = deriveState.snapshot().toJs({ dict_converter: Object.fromEntries });
-  consumedEl.textContent = '';
   outDerive.innerHTML = `start [${tagSpan(snap.tag)}]: ${escapeHtml(snap.pretty)}`;
+  refreshNav();
   charsEl.value = '';
   charsEl.focus();
 }
@@ -50,10 +65,24 @@ function stepChars(s) {
   if (!s) return;
   for (const c of s) {
     const r = deriveState.step(c).toJs({ dict_converter: Object.fromEntries });
-    consumedEl.textContent += c;
     appendLine(`  '${escapeHtml(c)}' [${tagSpan(r.tag)}]: ${escapeHtml(r.pretty)}`);
     if (r.dead) break;
   }
+  refreshNav();
+}
+
+function back() {
+  if (!deriveState || !deriveState.back()) return;
+  const snap = deriveState.snapshot().toJs({ dict_converter: Object.fromEntries });
+  appendLine(`  [BACK] '${escapeHtml(snap.consumed)}' [${tagSpan(snap.tag)}]: ${escapeHtml(snap.pretty)}`);
+  refreshNav();
+}
+
+function forward() {
+  if (!deriveState || !deriveState.forward()) return;
+  const snap = deriveState.snapshot().toJs({ dict_converter: Object.fromEntries });
+  appendLine(`  [FWD] '${escapeHtml(snap.consumed)}' [${tagSpan(snap.tag)}]: ${escapeHtml(snap.pretty)}`);
+  refreshNav();
 }
 
 const sessionUI = mountSessionUI({
@@ -79,6 +108,8 @@ form.addEventListener('submit', async (e) => {
 });
 
 btnReset.addEventListener('click', resetDerive);
+btnBack.addEventListener('click', back);
+btnForward.addEventListener('click', forward);
 
 btnStep.addEventListener('click', () => {
   stepChars(charsEl.value);
@@ -106,6 +137,7 @@ boot({ statusEl })
   .then(({ api: a }) => {
     api = a;
     [patternEl, btnNegate, btnReset, btnStep, btnEof, charsEl].forEach((el) => (el.disabled = false));
+    refreshNav();
     sessionUI.enable();
     patternEl.focus();
   })
