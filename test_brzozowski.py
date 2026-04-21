@@ -41,6 +41,19 @@ CASES = [
     ("(ab)+", "abab", True), ("(ab)+", "aba", False),
     # Negated literal
     ("[^a]", "b", True), ("[^a]", "a", False),
+    # Lookaheads: body only needs to match a prefix, not the whole remainder
+    (r"(?=.*\d).{8,}", "P1ssword", True),     # digit in the middle
+    (r"(?=.*\d).{8,}", "Password1", True),    # digit at end
+    (r"(?=.*\d).{8,}", "P1sswordX", True),    # digit early
+    (r"(?=.*\d).{8,}", "Password", False),    # no digit
+    (r"(?=.*[A-Z]).{8,}", "Password1", True),
+    (r"(?=.*[A-Z]).{8,}", "password1", False),
+    (r"(?=.*[A-Z])(?=.*\d).{8,}", "Password1", True),
+    (r"(?=.*[A-Z])(?=.*\d).{8,}", "password1", False),
+    (r"(?=.*a).{3}", "bab", True),
+    (r"(?=.*a).{3}", "bbb", False),
+    (r"(?!abc).{3}", "abc", False),
+    (r"(?!abc).{3}", "xyz", True),
 ]
 
 

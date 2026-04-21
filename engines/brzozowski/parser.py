@@ -7,6 +7,12 @@ from engines.brzozowski.re_ast import (
 )
 
 
+def _lookahead_constraint(body: Re) -> Re:
+    """Lookahead `(?=X)` asserts X matches some prefix from here — so under
+    fullmatch-with-intersection semantics the body must be wrapped as `X.*`."""
+    return mk_cat([body, ALL_GOOD])
+
+
 _DIGIT = frozenset(chr(c) for c in range(ord('0'), ord('9') + 1))
 _WORD = (
     frozenset(chr(c) for c in range(ord('a'), ord('z') + 1))
@@ -155,7 +161,8 @@ def _build_seq(items, flags: int) -> Re:
                 a_type, (direction, sub) = items[i]
                 body = regex_to_re(sub, flags)
                 if direction == 1:
-                    lookahead_constraints.append(mk_not(body) if a_type == sc.ASSERT_NOT else body)
+                    constraint = _lookahead_constraint(body)
+                    lookahead_constraints.append(mk_not(constraint) if a_type == sc.ASSERT_NOT else constraint)
                 elif direction == -1:
                     prefix.append(mk_lookbehind(body, negated=(a_type == sc.ASSERT_NOT)))
                 else:
