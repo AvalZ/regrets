@@ -7,6 +7,7 @@ const PY_FILES = [
   'engines/brzozowski/dfa.py',
   'engines/brzozowski/session.py',
   'engines/brzozowski/derive_session.py',
+  'engines/brzozowski/generator.py',
 ];
 
 const CANDIDATE_BASES = ['../', './', '/'];
@@ -46,6 +47,66 @@ export function escapeHtml(s) {
 export function tagSpan(t) {
   const cls = t === 'MATCH' ? 'match' : t === 'DEAD' ? 'dead' : 'partial';
   return `<span class="tag ${cls}">${t}</span>`;
+}
+
+const GEN_TEMPLATE = `
+  <fieldset>
+    <legend>Generate sample strings</legend>
+    <div class="row">
+      <label style="font-size: 0.85rem;">N:
+        <input type="number" data-el="gen-n" value="10" min="1" max="500" style="width: 4.5rem;">
+      </label>
+      <label style="font-size: 0.85rem;">min len:
+        <input type="number" data-el="gen-min" value="0" min="0" max="200" style="width: 4.5rem;">
+      </label>
+      <label style="font-size: 0.85rem;">max len:
+        <input type="number" data-el="gen-max" value="20" min="0" max="500" style="width: 4.5rem;">
+      </label>
+      <button type="button" data-action="gen" disabled>Generate</button>
+    </div>
+    <pre data-el="gen-out">(click Generate to sample accepting strings)</pre>
+  </fieldset>
+`;
+
+export function mountGenerateUI({ container, generate: genFn }) {
+  container.innerHTML = GEN_TEMPLATE;
+  const q = (s) => container.querySelector(s);
+  const btn = q('[data-action="gen"]');
+  const nEl = q('[data-el="gen-n"]');
+  const minEl = q('[data-el="gen-min"]');
+  const maxEl = q('[data-el="gen-max"]');
+  const outEl = q('[data-el="gen-out"]');
+
+  btn.addEventListener('click', async () => {
+    const n = parseInt(nEl.value, 10) || 10;
+    const mn = parseInt(minEl.value, 10) || 0;
+    const mx = parseInt(maxEl.value, 10) || 20;
+    btn.disabled = true;
+    outEl.textContent = `⏳ generating up to ${n} string(s)…`;
+    await new Promise((r) => setTimeout(r, 0));
+    const t0 = performance.now();
+    try {
+      const proxy = genFn(n, mn, mx);
+      const arr = proxy.toJs ? proxy.toJs() : Array.from(proxy);
+      if (proxy.destroy) proxy.destroy();
+      const ms = (performance.now() - t0).toFixed(0);
+      if (!arr.length) {
+        outEl.textContent = `(no strings found with length in [${mn}, ${mx}])\n\n(searched in ${ms} ms)`;
+      } else {
+        const lines = arr.map((s, i) => `${String(i + 1).padStart(3)}. ${JSON.stringify(s)}`);
+        outEl.textContent = `${lines.join('\n')}\n\n(${arr.length} string(s) in ${ms} ms)`;
+      }
+    } catch (err) {
+      outEl.textContent = `error: ${fmtErr(err)}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  return {
+    enable() { btn.disabled = false; },
+    disable() { btn.disabled = true; },
+  };
 }
 
 export async function runWithLoading(buttons, targetEl, label, work, { showElapsed = true } = {}) {
@@ -104,6 +165,7 @@ from engines.brzozowski.pretty import pretty
 from engines.brzozowski.dfa import build_dfa, dfa_to_regex, chars_to_re, PRINTABLE
 from engines.brzozowski.session import DfaBuilder
 from engines.brzozowski.derive_session import DeriveSession
+from engines.brzozowski.generator import generate as _generate
 
 
 def _split_lines(raw):
@@ -271,6 +333,27 @@ def make_session_single(pattern):
 
 def make_session_negated(pattern):
     return DfaBuilder(mk_not(parse(pattern)))
+
+
+def _gen_list(re, n, min_len, max_len):
+    return list(_generate(
+        re,
+        n=max(1, int(n)),
+        min_len=max(0, int(min_len)),
+        max_len=max(0, int(max_len)),
+    ))
+
+
+def generate_single(pattern, n=10, min_len=0, max_len=20):
+    return _gen_list(parse(pattern), n, min_len, max_len)
+
+
+def generate_negated(pattern, n=10, min_len=0, max_len=20):
+    return _gen_list(mk_not(parse(pattern)), n, min_len, max_len)
+
+
+def generate_merged(matching_raw, not_matching_raw, n=10, min_len=0, max_len=20):
+    return _gen_list(build_re(matching_raw, not_matching_raw), n, min_len, max_len)
 `);
 
   const api = {
@@ -285,6 +368,9 @@ def make_session_negated(pattern):
     makeSession: pyodide.globals.get('make_session'),
     makeSessionSingle: pyodide.globals.get('make_session_single'),
     makeSessionNegated: pyodide.globals.get('make_session_negated'),
+    generateSingle: pyodide.globals.get('generate_single'),
+    generateNegated: pyodide.globals.get('generate_negated'),
+    generateMerged: pyodide.globals.get('generate_merged'),
   };
 
   setStatus('Ready.');

@@ -1,4 +1,4 @@
-import { boot, fmtErr, escapeHtml, tagSpan } from './regrets.js';
+import { boot, fmtErr, escapeHtml, tagSpan, mountGenerateUI } from './regrets.js';
 import { mountSessionUI } from './sessionui.js';
 
 const statusEl = document.getElementById('status');
@@ -13,6 +13,7 @@ const charsEl = document.getElementById('chars');
 const consumedEl = document.getElementById('consumed');
 const outDerive = document.getElementById('out-derive');
 const sessionMount = document.getElementById('session-mount');
+const generateMount = document.getElementById('generate-mount');
 
 let api = null;
 let deriveState = null;
@@ -80,6 +81,11 @@ const sessionUI = mountSessionUI({
   makeSession: () => api.makeSession(matchingEl.value, notMatchingEl.value),
 });
 
+const generateUI = mountGenerateUI({
+  container: generateMount,
+  generate: (n, mn, mx) => api.generateMerged(matchingEl.value, notMatchingEl.value, n, mn, mx),
+});
+
 btnReset.addEventListener('click', resetDerive);
 btnBack.addEventListener('click', back);
 btnForward.addEventListener('click', forward);
@@ -108,6 +114,7 @@ boot({ statusEl })
   .then(({ api: a }) => {
     api = a;
     sessionUI.enable();
+    generateUI.enable();
     [btnReset, btnStep, btnEof, charsEl].forEach((el) => (el.disabled = false));
     refreshNav();
   })

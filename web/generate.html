@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>regrets — generate strings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <nav>
+    <a href="./">converter</a>
+    <a href="./negate.html">negate</a>
+    <a href="./playground.html">playground</a>
+    <a href="./generate.html" class="active">generate</a>
+    <a href="https://github.com/AvalZ/regrets" target="_blank" rel="noopener">github</a>
+  </nav>
+
+  <div class="hero">
+    <h1>generate strings</h1>
+    <div class="sub">
+      Paste a regex. Get up to N distinct strings that fully match it.
+    </div>
+  </div>
+
+  <div id="status">Booting Pyodide…</div>
+
+  <form id="form" class="row" style="align-items: stretch; margin-bottom: 1rem;">
+    <input type="text" id="pattern" class="big-input" placeholder="e.g. [a-z]{2,4}  or  (?=.*\d).{8,}" autofocus
+      style="flex: 1;" disabled>
+    <button id="btn-generate" type="submit" disabled>Generate</button>
+  </form>
+
+  <fieldset>
+    <legend>parameters</legend>
+    <div class="row">
+      <label style="font-size: 0.85rem;">N strings:
+        <input type="number" id="gen-n" value="20" min="1" max="500" style="width: 5rem;">
+      </label>
+      <label style="font-size: 0.85rem;">min length:
+        <input type="number" id="gen-min" value="0" min="0" max="200" style="width: 5rem;">
+      </label>
+      <label style="font-size: 0.85rem;">max length:
+        <input type="number" id="gen-max" value="20" min="0" max="500" style="width: 5rem;">
+      </label>
+      <label style="font-size: 0.85rem;">
+        <input type="checkbox" id="gen-negate"> negate (generate counter-examples)
+      </label>
+    </div>
+  </fieldset>
+
+  <pre id="out-result">(generated strings appear here)</pre>
+
+  <script src="./vendor/pyodide/pyodide.js"></script>
+  <script type="module" src="./generate.js"></script>
+</body>
+
+</html>

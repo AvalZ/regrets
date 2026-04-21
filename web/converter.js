@@ -1,4 +1,4 @@
-import { boot, fmtErr, escapeHtml, tagSpan, runWithLoading } from './regrets.js';
+import { boot, fmtErr, escapeHtml, tagSpan, runWithLoading, mountGenerateUI } from './regrets.js';
 import { mountSessionUI } from './sessionui.js';
 
 const statusEl = document.getElementById('status');
@@ -15,6 +15,7 @@ const charsEl = document.getElementById('chars');
 const consumedEl = document.getElementById('consumed');
 const outDerive = document.getElementById('out-derive');
 const sessionMount = document.getElementById('session-mount');
+const generateMount = document.getElementById('generate-mount');
 
 let api = null;
 let deriveState = null;
@@ -94,6 +95,15 @@ const sessionUI = mountSessionUI({
   },
 });
 
+const generateUI = mountGenerateUI({
+  container: generateMount,
+  generate: (n, mn, mx) => {
+    const pat = patternEl.value.trim();
+    if (!pat) throw new Error('enter a pattern first');
+    return api.generateSingle(pat, n, mn, mx);
+  },
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const pat = patternEl.value.trim();
@@ -140,6 +150,7 @@ boot({ statusEl })
     [patternEl, btnConvert, btnReset, btnStep, btnEof, charsEl].forEach((el) => (el.disabled = false));
     refreshNav();
     sessionUI.enable();
+    generateUI.enable();
     patternEl.focus();
   })
   .catch((err) => {
